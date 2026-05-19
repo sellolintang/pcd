@@ -3,6 +3,8 @@ import { useState } from 'react'
 function App() {
   const [originalImage, setOriginalImage] = useState(null)
   const [processedImage, setProcessedImage] = useState(null)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState('No image loaded')
   const [activeMenu, setActiveMenu] = useState(null)
 
@@ -48,9 +50,71 @@ function App() {
     if (!file) return
 
     const imageUrl = URL.createObjectURL(file)
+
+    setSelectedFile(file)
     setOriginalImage(imageUrl)
     setProcessedImage(null)
     setStatus(`Image loaded: ${file.name}`)
+  }
+
+  const handleProcessImage = async (operation) => {
+    if (!selectedFile) {
+      setStatus('Please upload an image first')
+      return
+    }
+
+    try {
+      setIsProcessing(true)
+      setStatus(`Processing image with ${operation}...`)
+
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('operation', operation)
+
+      const response = await fetch('/api/process', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(errorText || 'Failed to process image')
+      }
+
+      const blob = await response.blob()
+      const processedImageUrl = URL.createObjectURL(blob)
+
+      setProcessedImage(processedImageUrl)
+      setStatus(`Image processed successfully: ${operation}`)
+    } catch (error) {
+      console.error(error)
+      setStatus(`Error: ${error.message}`)
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleResetImage = () => {
+    setProcessedImage(null)
+    setStatus('Processed image has been reset')
+  }
+
+  const handleSaveImage = () => {
+    if (!processedImage) {
+      setStatus('No processed image to save')
+      return
+    }
+
+    const link = document.createElement('a')
+    link.href = processedImage
+    link.download = 'processed-image.jpg'
+    link.click()
+
+    setStatus('Processed image saved')
+  }
+
+  const handleUnsupportedFeature = (featureName) => {
+    setStatus(`${featureName} feature is not available in backend yet`)
   }
 
   const handleMenuClick = (menuName) => {
@@ -58,7 +122,14 @@ function App() {
   }
 
   const handleMenuItemClick = (menuName, itemName) => {
-    setStatus(`${menuName} > ${itemName} selected`)
+    if (itemName === 'Reset Image') {
+      handleResetImage()
+    } else if (itemName === 'Save Image' || itemName === 'Export Image') {
+      handleSaveImage()
+    } else {
+      setStatus(`${menuName} > ${itemName} selected`)
+    }
+
     setActiveMenu(null)
   }
 
@@ -134,71 +205,109 @@ function App() {
           </div>
 
           <div>
-            {/* <h2 className="font-semibold mb-3">Enhancement</h2> */}
+            <h2 className="font-semibold mb-3">Enhancement</h2>
 
             <label className="block mb-4">
-              {/* <span className="text-sm text-slate-300">Brightness</span>
+              <span className="text-sm text-slate-300">Brightness</span>
               <input
                 type="range"
                 min="-100"
                 max="100"
                 defaultValue="0"
                 className="w-full"
-              /> */}
+              />
             </label>
 
             <label className="block mb-4">
-              {/* <span className="text-sm text-slate-300">Contrast</span>
+              <span className="text-sm text-slate-300">Contrast</span>
               <input
                 type="range"
                 min="-100"
                 max="100"
                 defaultValue="0"
                 className="w-full"
-              /> */}
+              />
             </label>
 
             <div className="grid grid-cols-2 gap-2">
-              {/* <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleProcessImage('blur')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Blur
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Sharpen')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Sharpen
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleProcessImage('grayscale')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Grayscale
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={handleResetImage}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Reset
-              </button> */}
+              </button>
+
+              <button
+                onClick={() => handleProcessImage('invert')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Invert
+              </button>
+
+              <button
+                onClick={() => handleProcessImage('brightness')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Brightness
+              </button>
             </div>
           </div>
 
           <div>
-            {/* <h2 className="font-semibold mb-3">Transform</h2> */}
+            <h2 className="font-semibold mb-3">Transform</h2>
 
             <label className="block mb-4">
-              {/* <span className="text-sm text-slate-300">Rotate</span>
+              <span className="text-sm text-slate-300">Rotate</span>
               <input
                 type="range"
                 min="0"
                 max="360"
                 defaultValue="0"
                 className="w-full"
-              /> */}
+              />
             </label>
 
             <div className="grid grid-cols-2 gap-2">
-              {/* <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Flip Horizontal')}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+              >
                 Flip H
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Flip Vertical')}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+              >
                 Flip V
-              </button> */}
+              </button>
             </div>
           </div>
         </aside>
@@ -236,7 +345,9 @@ function App() {
                   />
                 ) : (
                   <p className="text-slate-400">
-                    Processed image will appear here
+                    {isProcessing
+                      ? 'Processing image...'
+                      : 'Processed image will appear here'}
                   </p>
                 )}
               </div>
@@ -247,58 +358,86 @@ function App() {
         {/* Right Sidebar */}
         <aside className="w-80 bg-slate-900 border-l border-slate-700 p-4 space-y-5">
           <div>
-            {/* <h2 className="font-semibold mb-3">Edge & Binary</h2> */}
+            <h2 className="font-semibold mb-3">Edge & Binary</h2>
 
             <label className="block mb-4">
-              {/* <span className="text-sm text-slate-300">Threshold</span>
+              <span className="text-sm text-slate-300">Threshold</span>
               <input
                 type="range"
                 min="0"
                 max="255"
                 defaultValue="127"
                 className="w-full"
-              /> */}
+              />
             </label>
 
             <div className="grid grid-cols-2 gap-2">
-              {/* <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleProcessImage('canny')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Canny
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Sobel')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Sobel
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Prewitt')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Prewitt
               </button>
 
-              <button className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Laplacian')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 Laplacian
-              </button> */}
+              </button>
             </div>
           </div>
 
           <div>
-            {/* <h2 className="font-semibold mb-3">Advanced Tools</h2>
+            <h2 className="font-semibold mb-3">Advanced Tools</h2>
 
             <div className="space-y-2">
-              <button className="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Histogram')}
+                className="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+              >
                 Show Histogram
               </button>
 
-              <button className="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Segmentation')}
+                className="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+              >
                 Segmentation
               </button>
 
-              <button className="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={() => handleUnsupportedFeature('Compression')}
+                className="w-full bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+              >
                 Compression
               </button>
 
-              <button className="w-full bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-md text-sm">
+              <button
+                onClick={handleSaveImage}
+                className="w-full bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-md text-sm"
+              >
                 Save Image
               </button>
-            </div> */}
+            </div>
           </div>
         </aside>
       </main>
