@@ -7,6 +7,20 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [status, setStatus] = useState('No image loaded')
   const [activeMenu, setActiveMenu] = useState(null)
+  const [rotateAngle, setRotateAngle] = useState(0)
+  const [resizeWidth, setResizeWidth] = useState(300)
+  const [resizeHeight, setResizeHeight] = useState(300)
+  const [translateX, setTranslateX] = useState(50)
+  const [translateY, setTranslateY] = useState(50)
+  const [cropX, setCropX] = useState(0)
+  const [cropY, setCropY] = useState(0)
+  const [cropW, setCropW] = useState(200)
+  const [cropH, setCropH] = useState(200)
+  const [interpolation, setInterpolation] = useState('bilinear')
+  const [brightnessValue, setBrightnessValue] = useState(0)
+  const [contrastValue, setContrastValue] = useState(0)
+  const [blurKernel, setBlurKernel] = useState(15)
+  const [sharpenStrength, setSharpenStrength] = useState(1)
 
   const menuItems = {
     File: [
@@ -57,7 +71,7 @@ function App() {
     setStatus(`Image loaded: ${file.name}`)
   }
 
-  const handleProcessImage = async (operation) => {
+  const handleProcessImage = async (operation, params = {}) => {
     if (!selectedFile) {
       setStatus('Please upload an image first')
       return
@@ -70,6 +84,10 @@ function App() {
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('operation', operation)
+
+      Object.entries(params).forEach(([key, value]) => {
+        formData.append(key, value)
+      })
 
       const response = await fetch('/api/process', {
         method: 'POST',
@@ -284,31 +302,177 @@ function App() {
             <h2 className="font-semibold mb-3">Transform</h2>
 
             <label className="block mb-4">
-              <span className="text-sm text-slate-300">Rotate</span>
+              <span className="text-sm text-slate-300">Interpolation</span>
+              <select
+                value={interpolation}
+                onChange={(e) => setInterpolation(e.target.value)}
+                className="mt-2 w-full bg-slate-800 border border-slate-700 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="bilinear">Bilinear</option>
+                <option value="nearest">Nearest</option>
+              </select>
+            </label>
+
+            <label className="block mb-4">
+              <span className="text-sm text-slate-300">Rotate: {rotateAngle}°</span>
               <input
                 type="range"
                 min="0"
                 max="360"
-                defaultValue="0"
+                value={rotateAngle}
+                onChange={(e) => setRotateAngle(e.target.value)}
                 className="w-full"
               />
             </label>
 
-            <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() =>
+                handleProcessImage('rotate', {
+                  angle: rotateAngle,
+                  interpolation
+                })
+              }
+              disabled={isProcessing}
+              className="w-full mb-3 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50"
+            >
+              Apply Rotate
+            </button>
+
+            <div className="grid grid-cols-2 gap-2 mb-4">
               <button
-                onClick={() => handleUnsupportedFeature('Flip Horizontal')}
-                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+                onClick={() => handleProcessImage('flip_horizontal')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50"
               >
                 Flip H
               </button>
 
               <button
-                onClick={() => handleUnsupportedFeature('Flip Vertical')}
-                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm"
+                onClick={() => handleProcessImage('flip_vertical')}
+                disabled={isProcessing}
+                className="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50"
               >
                 Flip V
               </button>
             </div>
+
+            <div className="mb-4">
+              <span className="text-sm text-slate-300">Resize</span>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <input
+                  type="number"
+                  value={resizeWidth}
+                  onChange={(e) => setResizeWidth(e.target.value)}
+                  placeholder="Width"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={resizeHeight}
+                  onChange={(e) => setResizeHeight(e.target.value)}
+                  placeholder="Height"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+              </div>
+
+              <button
+                onClick={() =>
+                  handleProcessImage('resize', {
+                    width: resizeWidth,
+                    height: resizeHeight,
+                    interpolation
+                  })
+                }
+                disabled={isProcessing}
+                className="w-full mt-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50"
+              >
+                Apply Resize
+              </button>
+            </div>
+
+            {/* <div className="mb-4">
+              <span className="text-sm text-slate-300">Translate</span>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <input
+                  type="number"
+                  value={translateX}
+                  onChange={(e) => setTranslateX(e.target.value)}
+                  placeholder="dx"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={translateY}
+                  onChange={(e) => setTranslateY(e.target.value)}
+                  placeholder="dy"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+              </div>
+
+              <button
+                onClick={() =>
+                  handleProcessImage('translate', {
+                    dx: translateX,
+                    dy: translateY,
+                    interpolation
+                  })
+                }
+                disabled={isProcessing}
+                className="w-full mt-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50"
+              >
+                Apply Translate
+              </button>
+            </div> */}
+
+            {/* <div className="mb-4">
+              <span className="text-sm text-slate-300">Crop Area</span>
+
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <input
+                  type="number"
+                  value={cropX}
+                  onChange={(e) => setCropX(e.target.value)}
+                  placeholder="X"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={cropY}
+                  onChange={(e) => setCropY(e.target.value)}
+                  placeholder="Y"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={cropW}
+                  onChange={(e) => setCropW(e.target.value)}
+                  placeholder="Width"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+                <input
+                  type="number"
+                  value={cropH}
+                  onChange={(e) => setCropH(e.target.value)}
+                  placeholder="Height"
+                  className="bg-slate-800 border border-slate-700 rounded-md px-2 py-2 text-sm"
+                />
+              </div>
+
+              <button
+                onClick={() =>
+                  handleProcessImage('crop', {
+                    crop_x: cropX,
+                    crop_y: cropY,
+                    crop_w: cropW,
+                    crop_h: cropH
+                  })
+                }
+                disabled={isProcessing}
+                className="w-full mt-2 bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-md text-sm disabled:opacity-50"
+              >
+                Apply Crop
+              </button>
+            </div> */}
           </div>
         </aside>
 
