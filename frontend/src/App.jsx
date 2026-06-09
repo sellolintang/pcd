@@ -1,5 +1,94 @@
 import { useRef, useState } from 'react'
 
+const Slider = ({ label, value, min, max, step = 1, onChange }) => (
+  <label className="block">
+    <div className="mb-2 flex items-center justify-between text-sm font-semibold text-slate-700">
+      <span>{label}</span>
+      <span>{value}</span>
+    </div>
+
+    <input
+      type="range"
+      min={min}
+      max={max}
+      step={step}
+      value={value}
+      onChange={(event) => onChange(Number(event.target.value))}
+      className="w-full cursor-pointer accent-blue-600"
+    />
+  </label>
+)
+
+const NumberInput = ({ label, value, onChange, inputClass }) => (
+  <label className="block">
+    <span className="mb-2 block text-sm font-semibold text-slate-700">
+      {label}
+    </span>
+
+    <input
+      type="number"
+      value={value}
+      onChange={(event) => onChange(Number(event.target.value))}
+      className={inputClass}
+    />
+  </label>
+)
+
+const SelectInput = ({ label, value, onChange, children, inputClass }) => (
+  <label className="block">
+    <span className="mb-2 block text-sm font-semibold text-slate-700">
+      {label}
+    </span>
+
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={inputClass}
+    >
+      {children}
+    </select>
+  </label>
+)
+
+const ToolButton = ({ children, onClick, disabled, className }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    className={className}
+  >
+    {children}
+  </button>
+)
+
+const Panel = ({ icon, groupTitle, title, description, children }) => (
+  <section className="rounded-3xl bg-white p-6 shadow-xl shadow-slate-200/70">
+    <div className="mb-5 flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-sm font-bold text-white">
+        {icon}
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
+          {groupTitle}
+        </p>
+
+        <h2 className="text-2xl font-bold text-slate-900">
+          {title}
+        </h2>
+
+        <p className="mt-1 text-sm text-slate-500">
+          {description}
+        </p>
+      </div>
+    </div>
+
+    <div className="space-y-4">
+      {children}
+    </div>
+  </section>
+)
+
 function App() {
   const fileInputRef = useRef(null)
 
@@ -508,79 +597,12 @@ function App() {
   const inputClass =
     'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
 
-  const Slider = ({ label, value, min, max, step = 1, onChange }) => (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">{label}</span>
-        <span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-          {value}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full accent-blue-600"
-      />
-    </div>
-  )
-
-  const NumberInput = ({ label, value, onChange }) => (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span>
-      <input
-        type="number"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={inputClass}
-      />
-    </label>
-  )
-
-  const SelectInput = ({ label, value, onChange, children }) => (
-    <label className="block">
-      <span className="mb-1 block text-xs font-semibold text-slate-500">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className={inputClass}
-      >
-        {children}
-      </select>
-    </label>
-  )
-
-  const ToolButton = ({ children, onClick }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={isProcessing || !selectedFile}
-      className={toolButton}
-    >
-      {children}
-    </button>
-  )
-
-  const Panel = ({ title, description, children }) => (
-    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-      <div className="mb-5">
-        <p className="text-xs font-bold uppercase tracking-wider text-blue-600">
-          {activeGroupData?.icon} {activeGroupData?.title}
-        </p>
-        <h2 className="mt-1 text-xl font-bold text-slate-900">{title}</h2>
-        <p className="mt-1 text-sm text-slate-500">{description}</p>
-      </div>
-      <div className="space-y-4">{children}</div>
-    </div>
-  )
-
   const renderPanel = () => {
     if (activeGroup === 'enhancement') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Image Enhancement"
           description="Atur kualitas visual gambar secara cepat."
         >
@@ -594,6 +616,8 @@ function App() {
                 contrast_value: contrastValue
               })
             }
+            disabled={isProcessing || !selectedFile}
+            className={toolButton}
           >
             Apply Brightness & Contrast
           </ToolButton>
@@ -601,17 +625,17 @@ function App() {
           <Slider label="Blur Kernel" value={blurKernel} min="1" max="31" step="2" onChange={setBlurKernel} />
 
           <div className="grid grid-cols-2 gap-3">
-            <ToolButton onClick={() => handleProcessImage('blur', { blur_kernel: blurKernel })}>
+            <ToolButton onClick={() => handleProcessImage('blur', { blur_kernel: blurKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
               Blur
             </ToolButton>
-            <ToolButton onClick={() => handleProcessImage('histogram_equalization')}>
+            <ToolButton onClick={() => handleProcessImage('histogram_equalization')} disabled={isProcessing || !selectedFile} className={toolButton}>
               Equalize
             </ToolButton>
           </div>
 
           <Slider label="Sharpen Strength" value={sharpenStrength} min="0" max="3" step="0.1" onChange={setSharpenStrength} />
 
-          <ToolButton onClick={() => handleProcessImage('sharpen', { sharpen_strength: sharpenStrength })}>
+          <ToolButton onClick={() => handleProcessImage('sharpen', { sharpen_strength: sharpenStrength })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Sharpen Image
           </ToolButton>
         </Panel>
@@ -621,21 +645,23 @@ function App() {
     if (activeGroup === 'restoration') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Restoration / Noise Reduction"
           description="Kurangi noise dan perbaiki citra yang kurang bersih."
         >
           <Slider label="Gaussian Kernel" value={blurKernel} min="1" max="31" step="2" onChange={setBlurKernel} />
-          <ToolButton onClick={() => handleProcessImage('gaussian_noise_reduction', { blur_kernel: blurKernel })}>
+          <ToolButton onClick={() => handleProcessImage('gaussian_noise_reduction', { blur_kernel: blurKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Gaussian Noise Reduction
           </ToolButton>
 
           <Slider label="Median Kernel" value={medianKernel} min="3" max="15" step="2" onChange={setMedianKernel} />
-          <ToolButton onClick={() => handleProcessImage('median_filter', { median_kernel: medianKernel })}>
+          <ToolButton onClick={() => handleProcessImage('median_filter', { median_kernel: medianKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Median Filter
           </ToolButton>
 
           <Slider label="Salt & Pepper Kernel" value={noiseKernel} min="3" max="15" step="2" onChange={setNoiseKernel} />
-          <ToolButton onClick={() => handleProcessImage('salt_pepper_removal', { noise_kernel: noiseKernel })}>
+          <ToolButton onClick={() => handleProcessImage('salt_pepper_removal', { noise_kernel: noiseKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Remove Salt & Pepper
           </ToolButton>
         </Panel>
@@ -645,37 +671,39 @@ function App() {
     if (activeGroup === 'transform') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Geometric Transformation"
           description="Ubah bentuk, posisi, dan ukuran gambar."
         >
-          <SelectInput label="Interpolation" value={interpolation} onChange={setInterpolation}>
+          <SelectInput label="Interpolation" value={interpolation} onChange={setInterpolation} inputClass={inputClass}>
             <option value="bilinear">Bilinear</option>
             <option value="nearest">Nearest</option>
           </SelectInput>
 
           <Slider label="Rotate Angle" value={rotateAngle} min="0" max="360" onChange={setRotateAngle} />
-          <ToolButton onClick={() => handleProcessImage('rotate', { angle: rotateAngle, interpolation })}>
+          <ToolButton onClick={() => handleProcessImage('rotate', { angle: rotateAngle, interpolation })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Rotate
           </ToolButton>
 
           <div className="grid grid-cols-2 gap-3">
-            <ToolButton onClick={() => handleProcessImage('flip_horizontal')}>Flip H</ToolButton>
-            <ToolButton onClick={() => handleProcessImage('flip_vertical')}>Flip V</ToolButton>
+            <ToolButton onClick={() => handleProcessImage('flip_horizontal')} disabled={isProcessing || !selectedFile} className={toolButton}>Flip H</ToolButton>
+            <ToolButton onClick={() => handleProcessImage('flip_vertical')} disabled={isProcessing || !selectedFile} className={toolButton}>Flip V</ToolButton>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <NumberInput label="Width" value={resizeWidth} onChange={setResizeWidth} />
-            <NumberInput label="Height" value={resizeHeight} onChange={setResizeHeight} />
+            <NumberInput label="Width" value={resizeWidth} onChange={setResizeWidth} inputClass={inputClass}/>
+            <NumberInput label="Height" value={resizeHeight} onChange={setResizeHeight} inputClass={inputClass} />
           </div>
-          <ToolButton onClick={() => handleProcessImage('resize', { width: resizeWidth, height: resizeHeight, interpolation })}>
+          <ToolButton onClick={() => handleProcessImage('resize', { width: resizeWidth, height: resizeHeight, interpolation })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Resize
           </ToolButton>
 
           <div className="grid grid-cols-2 gap-3">
-            <NumberInput label="Move X" value={translateX} onChange={setTranslateX} />
-            <NumberInput label="Move Y" value={translateY} onChange={setTranslateY} />
+            <NumberInput label="Move X" value={translateX} onChange={setTranslateX} inputClass={inputClass} />
+            <NumberInput label="Move Y" value={translateY} onChange={setTranslateY} inputClass={inputClass} />
           </div>
-          <ToolButton onClick={() => handleProcessImage('translate', { dx: translateX, dy: translateY, interpolation })}>
+          <ToolButton onClick={() => handleProcessImage('translate', { dx: translateX, dy: translateY, interpolation })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Translate
           </ToolButton>
 
@@ -733,11 +761,13 @@ function App() {
     if (activeGroup === 'edge') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Binary & Edge Processing"
           description="Deteksi tepi, thresholding, dan morfologi citra."
         >
           <Slider label="Threshold" value={thresholdValue} min="0" max="255" onChange={setThresholdValue} />
-          <ToolButton onClick={() => handleProcessImage('threshold', { threshold_value: thresholdValue })}>
+          <ToolButton onClick={() => handleProcessImage('threshold', { threshold_value: thresholdValue })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Binary Threshold
           </ToolButton>
 
@@ -745,27 +775,35 @@ function App() {
             <Slider label="Canny Low" value={cannyLow} min="0" max="255" onChange={setCannyLow} />
             <Slider label="Canny High" value={cannyHigh} min="0" max="255" onChange={setCannyHigh} />
           </div>
-          <ToolButton onClick={() => handleProcessImage('canny', { canny_low: cannyLow, canny_high: cannyHigh })}>
+          <ToolButton onClick={() => handleProcessImage('canny', { canny_low: cannyLow, canny_high: cannyHigh })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Canny Edge
           </ToolButton>
 
           <div className="grid grid-cols-2 gap-3">
-            <ToolButton onClick={() => handleProcessImage('sobel')}>Sobel</ToolButton>
-            <ToolButton onClick={() => handleProcessImage('prewitt')}>Prewitt</ToolButton>
-            <ToolButton onClick={() => handleProcessImage('robert')}>Robert</ToolButton>
-            <ToolButton onClick={() => handleProcessImage('laplacian')}>Laplacian</ToolButton>
+            <ToolButton onClick={() => handleProcessImage('sobel')} disabled={isProcessing || !selectedFile} className={toolButton}>
+              Sobel
+            </ToolButton>
+            <ToolButton onClick={() => handleProcessImage('prewitt')} disabled={isProcessing || !selectedFile} className={toolButton}>
+              Prewitt
+            </ToolButton>
+            <ToolButton onClick={() => handleProcessImage('robert')} disabled={isProcessing || !selectedFile} className={toolButton}>
+              Robert
+            </ToolButton>
+            <ToolButton onClick={() => handleProcessImage('laplacian')} disabled={isProcessing || !selectedFile} className={toolButton}>
+              Laplacian
+            </ToolButton>
           </div>
 
-          <ToolButton onClick={() => handleProcessImage('log', { blur_kernel: blurKernel })}>
+          <ToolButton onClick={() => handleProcessImage('log', { blur_kernel: blurKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Laplacian of Gaussian
           </ToolButton>
 
           <Slider label="Morphology Kernel" value={morphologyKernel} min="3" max="15" step="2" onChange={setMorphologyKernel} />
           <div className="grid grid-cols-2 gap-3">
-            <ToolButton onClick={() => handleProcessImage('erosion', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })}>
+            <ToolButton onClick={() => handleProcessImage('erosion', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })} disabled={isProcessing || !selectedFile} className={toolButton}>
               Erosion
             </ToolButton>
-            <ToolButton onClick={() => hhandleProcessImage('dilation', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })}>
+            <ToolButton onClick={() => handleProcessImage('dilation', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })} disabled={isProcessing || !selectedFile} className={toolButton}>
               Dilation
             </ToolButton>
           </div>
@@ -776,28 +814,34 @@ function App() {
     if (activeGroup === 'color') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Color Processing"
           description="Kelola grayscale, RGB channel, hue, dan saturation."
         >
           <div className="grid grid-cols-2 gap-3">
-            <ToolButton onClick={() => handleProcessImage('grayscale')}>Grayscale</ToolButton>
-            <ToolButton onClick={() => handleProcessImage('invert')}>Invert</ToolButton>
+            <ToolButton onClick={() => handleProcessImage('grayscale')} disabled={isProcessing || !selectedFile} className={toolButton}>
+              Grayscale
+            </ToolButton>
+            <ToolButton onClick={() => handleProcessImage('invert')} disabled={isProcessing || !selectedFile} className={toolButton}>
+              Invert
+            </ToolButton>
           </div>
 
-          <SelectInput label="Channel" value={channel} onChange={setChannel}>
+          <SelectInput label="Channel" value={channel} onChange={setChannel} inputClass={inputClass}>
             <option value="red">Red Channel</option>
             <option value="green">Green Channel</option>
             <option value="blue">Blue Channel</option>
           </SelectInput>
 
-          <ToolButton onClick={() => handleProcessImage('channel_split', { channel })}>
+          <ToolButton onClick={() => handleProcessImage('channel_split', { channel })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Show Selected Channel
           </ToolButton>
 
           <Slider label="Hue Shift" value={hueShift} min="-90" max="90" onChange={setHueShift} />
           <Slider label="Saturation" value={saturationValue} min="-100" max="100" onChange={setSaturationValue} />
 
-          <ToolButton onClick={() => handleProcessImage('hue_saturation', { hue_value: hueShift, saturation_value: saturationValue })}>
+          <ToolButton onClick={() => handleProcessImage('hue_saturation', { hue_value: hueShift, saturation_value: saturationValue })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Apply Hue & Saturation
           </ToolButton>
         </Panel>
@@ -807,20 +851,22 @@ function App() {
     if (activeGroup === 'segmentation') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Image Segmentation"
           description="Pisahkan region gambar menggunakan threshold, edge, atau clustering."
         >
           <Slider label="Threshold" value={thresholdValue} min="0" max="255" onChange={setThresholdValue} />
-          <ToolButton onClick={() => handleProcessImage('threshold_segmentation', { threshold_value: thresholdValue })}>
+          <ToolButton onClick={() => handleProcessImage('threshold_segmentation', { threshold_value: thresholdValue })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Threshold Segmentation
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('edge_segmentation', { canny_low: cannyLow, canny_high: cannyHigh })}>
+          <ToolButton onClick={() => handleProcessImage('edge_segmentation', { canny_low: cannyLow, canny_high: cannyHigh })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Edge Segmentation
           </ToolButton>
 
           <Slider label="K-Means Cluster" value={clusterCount} min="2" max="8" onChange={setClusterCount} />
-          <ToolButton onClick={() => handleProcessImage('region_segmentation', { segment_k: clusterCount })}>
+          <ToolButton onClick={() => handleProcessImage('region_segmentation', { segment_k: clusterCount })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Region Segmentation
           </ToolButton>
         </Panel>
@@ -830,32 +876,34 @@ function App() {
     if (activeGroup === 'compression') {
       return (
         <Panel
+          icon={activeGroupData?.icon}
+          groupTitle={activeGroupData?.title}
           title="Image Compression"
           description="Simulasi kompresi JPEG, kuantisasi, dan RLE preview."
         >
           <Slider label="JPEG Quality" value={jpegQuality} min="1" max="100" onChange={setJpegQuality} />
-          <ToolButton onClick={() => handleProcessImage('jpeg_compression', { jpeg_quality: jpegQuality })}>
+          <ToolButton onClick={() => handleProcessImage('jpeg_compression', { jpeg_quality: jpegQuality })} disabled={isProcessing || !selectedFile} className={toolButton}>
             JPEG Compression
           </ToolButton>
 
           <Slider label="Quantization Levels" value={quantizationLevels} min="2" max="32" onChange={setQuantizationLevels} />
-          <ToolButton onClick={() => handleProcessImage('quantization', { quantization_level: quantizationLevels })}>
+          <ToolButton onClick={() => handleProcessImage('quantization', { quantization_level: quantizationLevels })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Quantization
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('rle_preview')}>
+          <ToolButton onClick={() => handleProcessImage('rle_preview')} disabled={isProcessing || !selectedFile} className={toolButton}>
             RLE Visual Preview
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('huffman_preview')}>
+          <ToolButton onClick={() => handleProcessImage('huffman_preview')} disabled={isProcessing || !selectedFile} className={toolButton}>
             Huffman Simulation
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('arithmetic_preview')}>
+          <ToolButton onClick={() => handleProcessImage('arithmetic_preview')} disabled={isProcessing || !selectedFile} className={toolButton}>
             Arithmetic Simulation
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('lzw_preview')}>
+          <ToolButton onClick={() => handleProcessImage('lzw_preview')} disabled={isProcessing || !selectedFile} className={toolButton}>
             LZW Simulation
           </ToolButton>
         </Panel>
@@ -864,22 +912,24 @@ function App() {
 
     return (
       <Panel
+        icon={activeGroupData?.icon}
+        groupTitle={activeGroupData?.title}
         title="Histogram & CNN"
         description="Analisis distribusi intensitas piksel dan pengenalan objek pretrained CNN."
       >
-        <ToolButton onClick={() => handleVisualHistogram('histogram_rgb')}>
+        <ToolButton onClick={() => handleVisualHistogram('histogram_rgb')} disabled={isProcessing || !selectedFile} className={toolButton}>
           Show RGB Histogram
         </ToolButton>
 
-        <ToolButton onClick={() => handleVisualHistogram('histogram_gray')}>
+        <ToolButton onClick={() => handleVisualHistogram('histogram_gray')} disabled={isProcessing || !selectedFile} className={toolButton}>
           Show Grayscale Histogram
         </ToolButton>
 
-        <ToolButton onClick={() => handleCompareHistogram('rgb')}>
+        <ToolButton onClick={() => handleCompareHistogram('rgb')} disabled={isProcessing || !selectedFile} className={toolButton}>
           Compare RGB Histogram
         </ToolButton>
 
-        <ToolButton onClick={handleCnnRecognize}>
+        <ToolButton onClick={handleCnnRecognize} disabled={isProcessing || !selectedFile} className={toolButton}>
           Run CNN Recognition
         </ToolButton>
 
