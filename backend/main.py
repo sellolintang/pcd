@@ -303,15 +303,38 @@ def morphology_operation(img, operation="erosion", kernel_size=3, iterations=1):
 # E. COLOR PROCESSING
 # =========================================================
 def split_rgb_channel(img, channel="r"):
-    result = np.zeros_like(img)
-    channel = channel.lower()
+    """
+    Menampilkan salah satu channel warna RGB.
 
-    if channel == "b":
-        result[:, :, 0] = img[:, :, 0]
-    elif channel == "g":
-        result[:, :, 1] = img[:, :, 1]
-    else:
-        result[:, :, 2] = img[:, :, 2]
+    Catatan:
+    OpenCV membaca gambar dalam format BGR, bukan RGB.
+    Karena itu:
+    - Red   berada pada index 2
+    - Green berada pada index 1
+    - Blue  berada pada index 0
+    """
+
+    result = np.zeros_like(img)
+
+    channel = (channel or "r").strip().lower()
+
+    channel_map = {
+        "r": 2,
+        "red": 2,
+        "g": 1,
+        "green": 1,
+        "b": 0,
+        "blue": 0
+    }
+
+    if channel not in channel_map:
+        raise HTTPException(
+            status_code=400,
+            detail="Channel tidak valid. Gunakan r/red, g/green, atau b/blue."
+        )
+
+    selected_index = channel_map[channel]
+    result[:, :, selected_index] = img[:, :, selected_index]
 
     return result
 
@@ -445,48 +468,89 @@ def estimate_lzw_bits(data):
 
     return code_count * 12
 
+def estimate_rle_bits(data):
+    """
+    Estimasi ukuran kompresi Run-Length Encoding.
+    Setiap run disimpan sebagai pasangan:
+    - nilai piksel: 8 bit
+    - panjang run: 16 bit
+
+    Total per run = 24 bit.
+    """
+
+    values = data.tolist()
+
+    if len(values) == 0:
+        return 0
+
+    run_count = 1
+    previous_value = values[0]
+
+    for value in values[1:]:
+        if value != previous_value:
+            run_count += 1
+            previous_value = value
+
+    return run_count * 24
 
 def compression_report_canvas(img, method="huffman"):
     gray = to_gray(img)
     data = gray.flatten()
-
     original_bits = len(data) * 8
+
+    method = (method or "huffman").lower()
 
     if method == "huffman":
         compressed_bits = estimate_huffman_bits(data)
         title = "Huffman Compression Simulation"
+        method_note = "Variable-length coding based on pixel frequency."
     elif method == "arithmetic":
         compressed_bits = estimate_arithmetic_bits(data)
         title = "Arithmetic Compression Simulation"
+        method_note = "Entropy-based coding using symbol probability."
     elif method == "lzw":
         compressed_bits = estimate_lzw_bits(data)
         title = "LZW Compression Simulation"
+        method_note = "Dictionary-based lossless compression simulation."
+    elif method == "rle":
+        compressed_bits = estimate_rle_bits(data)
+        title = "RLE Compression Simulation"
+        method_note = "Run-length coding based on repeated pixel values."
     else:
         compressed_bits = original_bits
         title = "Compression Simulation"
+        method_note = "General compression simulation."
 
     compressed_bits = max(1, compressed_bits)
-    compression_ratio = original_bits / compressed_bits
+
+    compression_ratio = original_bits / compressed_bits if compressed_bits > 0 else 0
     saving_percent = (1 - (compressed_bits / original_bits)) * 100 if original_bits > 0 else 0
 
-    canvas = np.full((420, 760, 3), 255, dtype=np.uint8)
+    original_kb = original_bits / 8 / 1024
+    compressed_kb = compressed_bits / 8 / 1024
+
+    canvas = np.full((480, 820, 3), 255, dtype=np.uint8)
 
     lines = [
         title,
-        f"Original size     : {original_bits:,} bits",
-        f"Compressed size   : {compressed_bits:,} bits",
-        f"Compression ratio : {compression_ratio:.2f} : 1",
-        f"Saving estimate   : {saving_percent:.2f}%",
+        f"Original size      : {original_bits:,} bits ({original_kb:.2f} KB)",
+        f"Compressed size    : {compressed_bits:,} bits ({compressed_kb:.2f} KB)",
+        f"Compression ratio  : {compression_ratio:.2f} : 1",
+        f"Saving estimate    : {saving_percent:.2f}%",
+        "",
+        "Method description:",
+        method_note,
         "",
         "Note:",
-        "This output is a visual simulation based on grayscale pixel data.",
-        "The method estimates compression efficiency for learning purposes."
+        "This result is a compression simulation using grayscale pixel data.",
+        "The output is intended for Digital Image Processing learning."
     ]
 
-    y = 55
+    y = 45
     for index, line in enumerate(lines):
-        font_scale = 0.85 if index == 0 else 0.62
+        font_scale = 0.82 if index == 0 else 0.58
         thickness = 2 if index == 0 else 1
+
         cv2.putText(
             canvas,
             line,
@@ -497,7 +561,7 @@ def compression_report_canvas(img, method="huffman"):
             thickness,
             cv2.LINE_AA
         )
-        y += 42
+        y += 36
 
     return canvas
 
@@ -507,11 +571,8 @@ def quantization_compression(img, quantization_level=32):
     result = (img // step) * step
     return result.astype(np.uint8)
 
-
 def rle_visual_simulation(img):
-    gray = to_gray(img)
-    result = quantization_compression(cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR), 16)
-    return result
+    return compression_report_canvas(img, "rle")
 
 
 # =========================================================
@@ -560,6 +621,57 @@ def create_histogram_canvas(img, mode="rgb", title="Histogram"):
     ax.grid(True, alpha=0.25)
 
     return matplotlib_figure_to_bgr(fig)
+
+def histogram_summary(img):
+    gray = to_gray(img)
+
+    hist_gray = cv2.calcHist(
+        [gray],
+        [0],
+        None,
+        [256],
+        [0, 256]
+    ).flatten()
+
+    b_channel, g_channel, r_channel = cv2.split(img)
+
+    hist_red = cv2.calcHist(
+        [r_channel],
+        [0],
+        None,
+        [256],
+        [0, 256]
+    ).flatten()
+
+    hist_green = cv2.calcHist(
+        [g_channel],
+        [0],
+        None,
+        [256],
+        [0, 256]
+    ).flatten()
+
+    hist_blue = cv2.calcHist(
+        [b_channel],
+        [0],
+        None,
+        [256],
+        [0, 256]
+    ).flatten()
+
+    return {
+        "width": int(img.shape[1]),
+        "height": int(img.shape[0]),
+        "gray_mean": round(float(np.mean(gray)), 2),
+        "gray_std": round(float(np.std(gray)), 2),
+        "gray_min": int(np.min(gray)),
+        "gray_max": int(np.max(gray)),
+        "gray_median": round(float(np.median(gray)), 2),
+        "histogram_gray": [int(value) for value in hist_gray],
+        "histogram_red": [int(value) for value in hist_red],
+        "histogram_green": [int(value) for value in hist_green],
+        "histogram_blue": [int(value) for value in hist_blue]
+    }
 
 
 def compare_histogram_canvas(original_img, processed_img, mode="rgb"):
@@ -757,6 +869,22 @@ async def process_image(
 
     return encode_image(processed_img, output_quality, output_format)
 
+@app.post("/api/histogram")
+async def get_histogram_summary(
+    current_file: UploadFile = File(...),
+    original_file: UploadFile = File(None)
+):
+    current_img = read_image_from_upload_bytes(await current_file.read())
+
+    result = {
+        "current": histogram_summary(current_img)
+    }
+
+    if original_file is not None:
+        original_img = read_image_from_upload_bytes(await original_file.read())
+        result["original"] = histogram_summary(original_img)
+
+    return JSONResponse(result)
 
 @app.post("/api/histogram/compare")
 async def compare_histogram(

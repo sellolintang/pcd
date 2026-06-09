@@ -110,6 +110,7 @@ function App() {
   const [sharpenStrength, setSharpenStrength] = useState(1)
 
   // Restoration
+  const [gaussianKernel, setGaussianKernel] = useState(5)
   const [medianKernel, setMedianKernel] = useState(5)
   const [noiseKernel, setNoiseKernel] = useState(5)
 
@@ -138,7 +139,7 @@ function App() {
   const [morphologyKernel, setMorphologyKernel] = useState(3)
 
   // Color
-  const [channel, setChannel] = useState('red')
+  const [channel, setChannel] = useState('r')
   const [hueShift, setHueShift] = useState(0)
   const [saturationValue, setSaturationValue] = useState(0)
 
@@ -162,7 +163,7 @@ function App() {
     { id: 'edge', icon: '4', title: 'Edge', subtitle: 'Threshold & edges' },
     { id: 'color', icon: '5', title: 'Color', subtitle: 'RGB, hue, saturation' },
     { id: 'segmentation', icon: '6', title: 'Segment', subtitle: 'Threshold, edge, region' },
-    { id: 'compression', icon: '7', title: 'Compress', subtitle: 'JPEG, quantization' },
+    { id: 'compression', icon: '7', title: 'Compress', subtitle: 'JPEG, RLE, Huffman, LZW' },
     { id: 'analysis', icon: '8', title: 'Analyze', subtitle: 'Histogram & CNN' }
   ]
 
@@ -222,17 +223,83 @@ function App() {
     }
   }
 
+  const formatFileSize = (bytes = 0) => {
+    if (!bytes || bytes <= 0) return '0 KB'
+
+    if (bytes < 1024) {
+      return `${bytes} B`
+    }
+
+    if (bytes < 1024 * 1024) {
+      return `${(bytes / 1024).toFixed(2)} KB`
+    }
+
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  }
+
+  const getCompressionInfoText = (beforeBytes, afterBytes) => {
+    if (!beforeBytes || !afterBytes) return ''
+
+    const ratio = beforeBytes / afterBytes
+    const saving = (1 - afterBytes / beforeBytes) * 100
+
+    return ` Ukuran: ${formatFileSize(beforeBytes)} → ${formatFileSize(afterBytes)} | Rasio: ${ratio.toFixed(2)}:1 | Saving: ${saving.toFixed(2)}%.`
+  }
+
+  const allowedImageTypes = ['image/jpeg', 'image/png', 'image/bmp']
+  const allowedImageExtensions = ['jpg', 'jpeg', 'png', 'bmp']
+
+  const getFileExtension = (filename = '') => {
+    return filename.split('.').pop()?.toLowerCase() || ''
+  }
+
+  const isAllowedImageFile = (file) => {
+    if (!file) return false
+
+    const fileType = file.type?.toLowerCase()
+    const fileExtension = getFileExtension(file.name)
+
+    return (
+      allowedImageTypes.includes(fileType) ||
+      allowedImageExtensions.includes(fileExtension)
+    )
+  }
+
+  const getExtensionFromMimeType = (mimeType = '') => {
+    if (mimeType.includes('png')) return 'png'
+    if (mimeType.includes('bmp')) return 'bmp'
+    return 'jpg'
+  }
+
+  const getBaseFilename = (file, fallback = 'hasil-edit') => {
+    if (!file?.name) return fallback
+    return file.name.replace(/\.[^/.]+$/, '')
+  }
+
   const handleImageUpload = (event) => {
-    const file = event.target.files[0]
+    const file = event.target.files?.[0]
     if (!file) return
 
+    if (!isAllowedImageFile(file)) {
+      setStatus('Format file tidak didukung. Gunakan gambar JPG, JPEG, PNG, atau BMP.')
+      event.target.value = ''
+      return
+    }
+
     const url = URL.createObjectURL(file)
+    const baseName = getBaseFilename(file)
+
     setOriginalFile(file)
     setSelectedFile(file)
     setOriginalImage(url)
     setProcessedImage(null)
     setHistogramData(null)
     setCnnResult(null)
+    setPreviewMode('split')
+    setCropMode(false)
+    setCropSelection(null)
+    setCropDragStart(null)
+    setExportFilename(baseName)
     setStatus(`Gambar berhasil dimuat: ${file.name}`)
     event.target.value = ''
   }
@@ -254,6 +321,8 @@ function App() {
         formData.append(key, value)
       })
 
+      const beforeBytes = selectedFile?.size || 0
+
       const response = await fetch('/api/process', {
         method: 'POST',
         body: formData
@@ -264,15 +333,40 @@ function App() {
       }
 
       const blob = await response.blob()
+      const afterBytes = blob.size || 0
       const url = URL.createObjectURL(blob)
-      const newFile = new File([blob], 'processed-image.jpg', {
-        type: blob.type || 'image/jpeg'
-      })
+      const extension = getExtensionFromMimeType(blob.type)
+      const baseName = getBaseFilename(originalFile, 'processed-image')
+      const safeOperationName = operation.replace(/[^a-z0-9_-]/gi, '-').toLowerCase()
+
+      const newFile = new File(
+        [blob],
+        `${baseName}-${safeOperationName}.${extension}`,
+        { type: blob.type || 'image/jpeg' }
+      )
 
       setProcessedImage(url)
       setSelectedFile(newFile)
       setPreviewMode('split')
-      setStatus(`Selesai: ${operationLabels[operation] || operation}.`)
+
+      const compressionOperations = [
+        'jpeg_compression',
+        'quantization',
+        'rle_preview',
+        'huffman_preview',
+        'arithmetic_preview',
+        'lzw_preview'
+      ]
+
+      if (compressionOperations.includes(operation)) {
+        const infoText = operation === 'jpeg_compression'
+          ? getCompressionInfoText(beforeBytes, afterBytes)
+          : ' Laporan simulasi kompresi ditampilkan pada panel preview.'
+
+        setStatus(`Selesai: ${operationLabels[operation] || operation}.${infoText}`)
+      } else {
+        setStatus(`Selesai: ${operationLabels[operation] || operation}.`)
+      }
     } catch (error) {
       setStatus(`Error: ${error.message}`)
     } finally {
@@ -287,11 +381,12 @@ function App() {
       setIsProcessing(true)
       setHistogramData(null)
       setCnnResult(null)
-      setStatus('Membuat histogram...')
+      setStatus('Membuat histogram visual...')
 
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('operation', operation)
+      formData.append('output_format', 'png')
 
       const response = await fetch('/api/process', {
         method: 'POST',
@@ -305,11 +400,14 @@ function App() {
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
 
-      // Histogram hanya ditampilkan sebagai preview,
-      // selectedFile tidak diganti supaya gambar aktif tetap gambar asli/hasil edit.
       setProcessedImage(url)
       setPreviewMode('after')
-      setStatus('Histogram berhasil ditampilkan.')
+
+      const label = operation === 'histogram_gray'
+        ? 'Grayscale histogram'
+        : 'RGB histogram'
+
+      setStatus(`${label} berhasil ditampilkan pada panel preview.`)
     } catch (error) {
       setStatus(`Error: ${error.message}`)
     } finally {
@@ -356,17 +454,74 @@ function App() {
     }
   }
 
+  const resetEditorParams = () => {
+    // Enhancement
+    setBrightnessValue(0)
+    setContrastValue(0)
+    setBlurKernel(15)
+    setSharpenStrength(1)
+
+    // Restoration
+    setMedianKernel(5)
+    setNoiseKernel(5)
+
+    // Transform
+    setRotateAngle(0)
+    setResizeWidth(300)
+    setResizeHeight(300)
+    setTranslateX(50)
+    setTranslateY(50)
+    setCropX(0)
+    setCropY(0)
+    setCropW(200)
+    setCropH(200)
+    setInterpolation('bilinear')
+    setCropMode(false)
+    setCropSelection(null)
+    setCropDragStart(null)
+
+    // Edge & Binary
+    setThresholdValue(127)
+    setCannyLow(100)
+    setCannyHigh(200)
+    setMorphologyKernel(3)
+
+    // Color
+    setChannel('r')
+    setHueShift(0)
+    setSaturationValue(0)
+
+    // Segmentation
+    setClusterCount(3)
+
+    // Compression
+    setJpegQuality(70)
+    setQuantizationLevels(8)
+
+    // Export
+    setExportFormat('jpg')
+    setExportQuality(95)
+    setShowSaveModal(false)
+  }
+
   const handleResetImage = () => {
     if (!originalFile) {
       setStatus('Belum ada gambar untuk di-reset.')
       return
     }
 
+    const baseName = getBaseFilename(originalFile)
+
     setSelectedFile(originalFile)
     setProcessedImage(null)
     setHistogramData(null)
     setCnnResult(null)
-    setStatus('Gambar dikembalikan ke kondisi awal.')
+    setPreviewMode('split')
+    setExportFilename(baseName)
+
+    resetEditorParams()
+
+    setStatus('Gambar dan seluruh parameter editor dikembalikan ke kondisi awal.')
   }
 
   const handleSaveImage = () => {
@@ -443,7 +598,7 @@ function App() {
     try {
       setIsProcessing(true)
       setCnnResult(null)
-      setStatus('Menghitung histogram gambar...')
+      setStatus('Menghitung ringkasan histogram...')
 
       const formData = new FormData()
       formData.append('current_file', selectedFile)
@@ -462,8 +617,9 @@ function App() {
       }
 
       const data = await response.json()
+
       setHistogramData(data)
-      setStatus('Histogram berhasil dihitung.')
+      setStatus('Ringkasan histogram berhasil dihitung.')
     } catch (error) {
       setStatus(`Error: ${error.message}`)
     } finally {
@@ -650,8 +806,8 @@ function App() {
           title="Restoration / Noise Reduction"
           description="Kurangi noise dan perbaiki citra yang kurang bersih."
         >
-          <Slider label="Gaussian Kernel" value={blurKernel} min="1" max="31" step="2" onChange={setBlurKernel} />
-          <ToolButton onClick={() => handleProcessImage('gaussian_noise_reduction', { blur_kernel: blurKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
+          <Slider label="Gaussian Kernel" value={gaussianKernel} min="1" max="31" step="2" onChange={setGaussianKernel} />
+          <ToolButton onClick={() => handleProcessImage('gaussian_noise_reduction', { blur_kernel: gaussianKernel })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Gaussian Noise Reduction
           </ToolButton>
 
@@ -829,9 +985,9 @@ function App() {
           </div>
 
           <SelectInput label="Channel" value={channel} onChange={setChannel} inputClass={inputClass}>
-            <option value="red">Red Channel</option>
-            <option value="green">Green Channel</option>
-            <option value="blue">Blue Channel</option>
+            <option value="r">Red Channel</option>
+            <option value="g">Green Channel</option>
+            <option value="b">Blue Channel</option>
           </SelectInput>
 
           <ToolButton onClick={() => handleProcessImage('channel_split', { channel })} disabled={isProcessing || !selectedFile} className={toolButton}>
@@ -882,7 +1038,14 @@ function App() {
           description="Simulasi kompresi JPEG, kuantisasi, dan RLE preview."
         >
           <Slider label="JPEG Quality" value={jpegQuality} min="1" max="100" onChange={setJpegQuality} />
-          <ToolButton onClick={() => handleProcessImage('jpeg_compression', { jpeg_quality: jpegQuality })} disabled={isProcessing || !selectedFile} className={toolButton}>
+          <ToolButton
+            onClick={() => handleProcessImage('jpeg_compression', {
+              jpeg_quality: jpegQuality,
+              output_format: 'jpg'
+            })}
+            disabled={isProcessing || !selectedFile}
+            className={toolButton}
+          >
             JPEG Compression
           </ToolButton>
 
@@ -891,8 +1054,12 @@ function App() {
             Quantization
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('rle_preview')} disabled={isProcessing || !selectedFile} className={toolButton}>
-            RLE Visual Preview
+          <ToolButton
+            onClick={() => handleProcessImage('rle_preview')}
+            disabled={isProcessing || !selectedFile}
+            className={toolButton}
+          >
+            RLE Simulation
           </ToolButton>
 
           <ToolButton onClick={() => handleProcessImage('huffman_preview')} disabled={isProcessing || !selectedFile} className={toolButton}>
@@ -929,29 +1096,53 @@ function App() {
           Compare RGB Histogram
         </ToolButton>
 
+        <ToolButton
+          onClick={() => handleCompareHistogram('gray')}
+          disabled={isProcessing || !selectedFile}
+          className={toolButton}
+        >
+          Compare Grayscale Histogram
+        </ToolButton>
+
+        <ToolButton
+          onClick={handleHistogram}
+          disabled={isProcessing || !selectedFile}
+          className={toolButton}
+        >
+          Histogram Summary
+        </ToolButton>
+
         <ToolButton onClick={handleCnnRecognize} disabled={isProcessing || !selectedFile} className={toolButton}>
           Run CNN Recognition
         </ToolButton>
 
         {histogramData && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
             <h3 className="font-bold text-slate-900">Histogram Summary</h3>
-            <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-              {histogramData.original && (
-                <div className="rounded-xl bg-slate-50 p-3">
-                  <p className="font-semibold text-slate-800">Before</p>
-                  <p className="text-slate-500">Size: {histogramData.original.width} × {histogramData.original.height}</p>
-                  <p className="text-slate-500">Mean: {histogramData.original.gray_mean}</p>
-                  <p className="text-slate-500">Std: {histogramData.original.gray_std}</p>
-                </div>
-              )}
-              <div className="rounded-xl bg-blue-50 p-3">
-                <p className="font-semibold text-slate-800">Current</p>
-                <p className="text-slate-500">Size: {histogramData.current.width} × {histogramData.current.height}</p>
-                <p className="text-slate-500">Mean: {histogramData.current.gray_mean}</p>
-                <p className="text-slate-500">Std: {histogramData.current.gray_std}</p>
+
+            {histogramData.original && (
+              <div className="rounded-xl bg-white p-3">
+                <p className="font-semibold text-slate-900">Before</p>
+                <p>Size: {histogramData.original.width} × {histogramData.original.height}</p>
+                <p>Mean: {histogramData.original.gray_mean}</p>
+                <p>Std: {histogramData.original.gray_std}</p>
+                <p>Min: {histogramData.original.gray_min}</p>
+                <p>Max: {histogramData.original.gray_max}</p>
+                <p>Median: {histogramData.original.gray_median}</p>
               </div>
-            </div>
+            )}
+
+            {histogramData.current && (
+              <div className="rounded-xl bg-white p-3">
+                <p className="font-semibold text-slate-900">Current</p>
+                <p>Size: {histogramData.current.width} × {histogramData.current.height}</p>
+                <p>Mean: {histogramData.current.gray_mean}</p>
+                <p>Std: {histogramData.current.gray_std}</p>
+                <p>Min: {histogramData.current.gray_min}</p>
+                <p>Max: {histogramData.current.gray_max}</p>
+                <p>Median: {histogramData.current.gray_median}</p>
+              </div>
+            )}
           </div>
         )}
 
@@ -1142,7 +1333,7 @@ function App() {
               Editor Berkelas
             </h1>
             <p className="text-sm text-slate-500">
-              Editor Berkelas untuk semua kebutuhan pengolahan citra digital.
+              Editor Berkelas untuk semua kebutuhan pengolahan citra digital. Dibuat oleh Sello dan Shidqi.
             </p>
           </div>
 
@@ -1150,7 +1341,7 @@ function App() {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept=".jpg,.jpeg,.png,.bmp,image/jpeg,image/png,image/bmp"
               onChange={handleImageUpload}
               className="hidden"
             />
