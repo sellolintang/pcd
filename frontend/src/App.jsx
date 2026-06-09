@@ -1,5 +1,4 @@
 import { useRef, useState } from 'react'
-import Slider from './components/Slider'
 
 function App() {
   const fileInputRef = useRef(null)
@@ -441,92 +440,25 @@ function App() {
   const inputClass =
     'w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
 
-  // const Slider = ({ label, value, min, max, step = 1, onChange }) => {
-  //   const numericValue = Number(value)
-  //   const numericMin = Number(min)
-  //   const numericMax = Number(max)
-  //   const numericStep = Number(step)
-
-  //   const percentage =
-  //     ((numericValue - numericMin) / (numericMax - numericMin)) * 100
-
-  //   const clampValue = (value) => {
-  //     return Math.min(numericMax, Math.max(numericMin, value))
-  //   }
-
-  //   const snapToStep = (value) => {
-  //     const steppedValue =
-  //       Math.round((value - numericMin) / numericStep) * numericStep + numericMin
-
-  //     return Number(steppedValue.toFixed(4))
-  //   }
-
-  //   const updateValueFromPointer = (event, trackElement) => {
-  //     const rect = trackElement.getBoundingClientRect()
-  //     const pointerX = event.clientX - rect.left
-  //     const rawPercentage = pointerX / rect.width
-  //     const rawValue = numericMin + rawPercentage * (numericMax - numericMin)
-  //     const nextValue = snapToStep(clampValue(rawValue))
-
-  //     onChange(nextValue)
-  //   }
-
-  //   const handlePointerDown = (event) => {
-  //     event.preventDefault()
-
-  //     const trackElement = event.currentTarget
-
-  //     updateValueFromPointer(event, trackElement)
-
-  //     const handlePointerMove = (moveEvent) => {
-  //       moveEvent.preventDefault()
-  //       updateValueFromPointer(moveEvent, trackElement)
-  //     }
-
-  //     const handlePointerUp = () => {
-  //       window.removeEventListener('pointermove', handlePointerMove)
-  //       window.removeEventListener('pointerup', handlePointerUp)
-  //     }
-
-  //     window.addEventListener('pointermove', handlePointerMove)
-  //     window.addEventListener('pointerup', handlePointerUp)
-  //   }
-
-  //   return (
-  //     <div className="rounded-2xl border border-slate-200 bg-white p-4">
-  //       <div className="mb-3 flex items-center justify-between">
-  //         <span className="text-sm font-medium text-slate-700">{label}</span>
-
-  //         <span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
-  //           {numericValue}
-  //         </span>
-  //       </div>
-
-  //       <div
-  //         role="slider"
-  //         tabIndex={0}
-  //         aria-label={label}
-  //         aria-valuemin={numericMin}
-  //         aria-valuemax={numericMax}
-  //         aria-valuenow={numericValue}
-  //         onPointerDown={handlePointerDown}
-  //         className="relative h-8 w-full cursor-pointer select-none touch-none"
-  //       >
-  //         <div className="absolute left-0 top-1/2 h-2 w-full -translate-y-1/2 rounded-full bg-slate-200">
-  //           <div
-  //             className="h-full rounded-full bg-blue-600"
-  //             style={{ width: `${percentage}%` }}
-  //           />
-  //         </div>
-
-  //         <div
-  //           className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-600 shadow"
-  //           style={{ left: `${percentage}%` }}
-  //         />
-  //       </div>
-  //     </div>
-  //   )
-  // }
+  const Slider = ({ label, value, min, max, step = 1, onChange }) => (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+        <span className="rounded-lg bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
+          {value}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full accent-blue-600"
+      />
+    </div>
+  )
 
   const NumberInput = ({ label, value, onChange }) => (
     <label className="block">
