@@ -36,6 +36,12 @@ function App() {
   const [cropH, setCropH] = useState(200)
   const [interpolation, setInterpolation] = useState('bilinear')
 
+  // Interactive crop
+  const [cropMode, setCropMode] = useState(false)
+  const [cropSelection, setCropSelection] = useState(null) // { x, y, w, h } in display px
+  const [cropDragStart, setCropDragStart] = useState(null)
+  const cropImageRef = useRef(null)
+
   // Edge & Binary
   const [thresholdValue, setThresholdValue] = useState(127)
   const [cannyLow, setCannyLow] = useState(100)
@@ -55,14 +61,14 @@ function App() {
   const [quantizationLevels, setQuantizationLevels] = useState(8)
 
   const groups = [
-    { id: 'enhancement', icon: '✨', title: 'Enhance', subtitle: 'Brightness, contrast, sharpen' },
-    { id: 'restoration', icon: '🧹', title: 'Restore', subtitle: 'Noise reduction' },
-    { id: 'transform', icon: '🔄', title: 'Transform', subtitle: 'Rotate, crop, resize' },
-    { id: 'edge', icon: '🧱', title: 'Edge', subtitle: 'Threshold & edges' },
-    { id: 'color', icon: '🎨', title: 'Color', subtitle: 'RGB, hue, saturation' },
-    { id: 'segmentation', icon: '🧩', title: 'Segment', subtitle: 'Threshold, edge, region' },
-    { id: 'compression', icon: '📦', title: 'Compress', subtitle: 'JPEG, quantization' },
-    { id: 'analysis', icon: '📊', title: 'Analyze', subtitle: 'Histogram & CNN' }
+    { id: 'enhancement', icon: '1', title: 'Enhance', subtitle: 'Brightness, contrast, sharpen' },
+    { id: 'restoration', icon: '2', title: 'Restore', subtitle: 'Noise reduction' },
+    { id: 'transform', icon: '3', title: 'Transform', subtitle: 'Rotate, crop, resize' },
+    { id: 'edge', icon: '4', title: 'Edge', subtitle: 'Threshold & edges' },
+    { id: 'color', icon: '5', title: 'Color', subtitle: 'RGB, hue, saturation' },
+    { id: 'segmentation', icon: '6', title: 'Segment', subtitle: 'Threshold, edge, region' },
+    { id: 'compression', icon: '7', title: 'Compress', subtitle: 'JPEG, quantization' },
+    { id: 'analysis', icon: '8', title: 'Analyze', subtitle: 'Histogram & CNN' }
   ]
 
   const operationLabels = {
@@ -349,6 +355,71 @@ function App() {
     }
   }
 
+  // Convert display-space selection to actual image coordinates
+  const getImageCropCoords = () => {
+    const img = cropImageRef.current
+    const container = cropContainerRef.current
+    if (!img || !container || !cropSelection) return null
+    const imgRect = img.getBoundingClientRect()
+    const containerRect = container.getBoundingClientRect()
+    // offset of image inside container
+    const offsetX = imgRect.left - containerRect.left
+    const offsetY = imgRect.top - containerRect.top
+    // selection is in container space; convert to image-display space
+    const selInImgX = cropSelection.x - offsetX
+    const selInImgY = cropSelection.y - offsetY
+    // scale to natural image size
+    const scaleX = img.naturalWidth / imgRect.width
+    const scaleY = img.naturalHeight / imgRect.height
+    const x = Math.max(0, Math.round(selInImgX * scaleX))
+    const y = Math.max(0, Math.round(selInImgY * scaleY))
+    const w = Math.round(cropSelection.w * scaleX)
+    const h = Math.round(cropSelection.h * scaleY)
+    return { x, y, w, h }
+  }
+
+  const handleCropMouseDown = (e) => {
+    if (!cropMode) return
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    setCropDragStart({ x, y })
+    setCropSelection({ x, y, w: 0, h: 0 })
+  }
+
+  const handleCropMouseMove = (e) => {
+    if (!cropMode || !cropDragStart) return
+    e.preventDefault()
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    setCropSelection({
+      x: Math.min(x, cropDragStart.x),
+      y: Math.min(y, cropDragStart.y),
+      w: Math.abs(x - cropDragStart.x),
+      h: Math.abs(y - cropDragStart.y),
+    })
+  }
+
+  const handleCropMouseUp = (e) => {
+    if (!cropMode) return
+    e.preventDefault()
+    setCropDragStart(null)
+    // selection is now locked; user will click Apply
+  }
+
+  const handleApplyCrop = () => {
+    const coords = getImageCropCoords()
+    if (!coords || coords.w < 5 || coords.h < 5) {
+      setStatus('Pilih area crop terlebih dahulu dengan drag di gambar.')
+      return
+    }
+    setCropMode(false)
+    setCropSelection(null)
+    handleProcessImage('crop', { crop_x: coords.x, crop_y: coords.y, crop_w: coords.w, crop_h: coords.h })
+  }
+
   const activeGroupData = groups.find((item) => item.id === activeGroup)
 
   const buttonBase =
@@ -540,15 +611,53 @@ function App() {
             Translate
           </ToolButton>
 
-          <div className="grid grid-cols-2 gap-3">
-            <NumberInput label="Crop X" value={cropX} onChange={setCropX} />
-            <NumberInput label="Crop Y" value={cropY} onChange={setCropY} />
-            <NumberInput label="Crop W" value={cropW} onChange={setCropW} />
-            <NumberInput label="Crop H" value={cropH} onChange={setCropH} />
+          {/* Interactive Crop */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-slate-700">Crop</span>
+              {cropSelection && (
+                <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded-lg">
+                  {Math.round(cropSelection.w)} × {Math.round(cropSelection.h)}px
+                </span>
+              )}
+            </div>
+            {!cropMode ? (
+              <button
+                type="button"
+                onClick={() => { setCropMode(true); setCropSelection(null) }}
+                disabled={isProcessing || !selectedFile}
+                className={`${toolButton} flex items-center justify-center gap-2`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4M3 7h4M17 3v4M21 7h-4M7 21v-4M3 17h4M17 21v-4M21 17h-4M9 9h6v6H9z" />
+                </svg>
+                Select Crop Area
+              </button>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2 leading-relaxed">
+                  🖱️ Drag di gambar <strong>Before</strong> untuk memilih area crop.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleApplyCrop}
+                    disabled={!cropSelection || cropSelection.w < 5}
+                    className={`${buttonBase} bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40`}
+                  >
+                    Apply Crop
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setCropMode(false); setCropSelection(null) }}
+                    className={`${buttonBase} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-          <ToolButton onClick={() => handleProcessImage('crop', { crop_x: cropX, crop_y: cropY, crop_w: cropW, crop_h: cropH })}>
-            Crop
-          </ToolButton>
         </Panel>
       )
     }
@@ -742,17 +851,61 @@ function App() {
     )
   }
 
-  const PreviewBox = ({ title, badge, image, empty }) => (
+  const cropContainerRef = useRef(null)
+
+  const PreviewBox = ({ title, badge, image, empty, isCropTarget }) => (
     <div className="flex min-h-[390px] flex-col rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="font-bold text-slate-900">{title}</h2>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
-          {badge}
-        </span>
+        <div className="flex items-center gap-2">
+          {isCropTarget && cropMode && (
+            <span className="animate-pulse rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
+              ✂️ Drag to crop
+            </span>
+          )}
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+            {badge}
+          </span>
+        </div>
       </div>
-      <div className="flex flex-1 items-center justify-center overflow-hidden rounded-2xl bg-[linear-gradient(45deg,#f1f5f9_25%,transparent_25%),linear-gradient(-45deg,#f1f5f9_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f1f5f9_75%),linear-gradient(-45deg,transparent_75%,#f1f5f9_75%)] bg-[length:22px_22px] bg-[position:0_0,0_11px,11px_-11px,-11px_0px]">
+      <div
+        ref={isCropTarget ? cropContainerRef : undefined}
+        className={`relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl bg-[linear-gradient(45deg,#f1f5f9_25%,transparent_25%),linear-gradient(-45deg,#f1f5f9_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#f1f5f9_75%),linear-gradient(-45deg,transparent_75%,#f1f5f9_75%)] bg-[length:22px_22px] bg-[position:0_0,0_11px,11px_-11px,-11px_0px] ${isCropTarget && cropMode ? 'cursor-crosshair' : ''}`}
+        onMouseDown={isCropTarget ? handleCropMouseDown : undefined}
+        onMouseMove={isCropTarget ? handleCropMouseMove : undefined}
+        onMouseUp={isCropTarget ? handleCropMouseUp : undefined}
+        onMouseLeave={isCropTarget ? handleCropMouseUp : undefined}
+      >
         {image ? (
-          <img src={image} alt={title} className="max-h-[560px] max-w-full object-contain" />
+          <>
+            <img
+              ref={isCropTarget ? cropImageRef : undefined}
+              src={image}
+              alt={title}
+              className="max-h-[560px] max-w-full object-contain select-none"
+              draggable={false}
+            />
+            {isCropTarget && cropMode && cropSelection && cropSelection.w > 2 && cropSelection.h > 2 && (
+              <div
+                className="pointer-events-none absolute border-2 border-blue-500"
+                style={{
+                  left: cropSelection.x,
+                  top: cropSelection.y,
+                  width: cropSelection.w,
+                  height: cropSelection.h,
+                  background: 'rgba(59,130,246,0.10)',
+                  boxShadow: '0 0 0 9999px rgba(0,0,0,0.4)',
+                }}
+              >
+                {[['top-0 left-0','-translate-x-1/2 -translate-y-1/2'],['top-0 right-0','translate-x-1/2 -translate-y-1/2'],['bottom-0 left-0','-translate-x-1/2 translate-y-1/2'],['bottom-0 right-0','translate-x-1/2 translate-y-1/2']].map(([pos, tr], i) => (
+                  <div key={i} className={`absolute ${pos} h-3 w-3 rounded-full bg-blue-500 border-2 border-white transform ${tr}`} />
+                ))}
+                <div className="absolute -bottom-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-blue-600 px-2 py-0.5 text-xs font-bold text-white shadow">
+                  {Math.round(cropSelection.w)} × {Math.round(cropSelection.h)}
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <p className="px-6 text-center text-sm text-slate-400">{empty}</p>
         )}
@@ -878,6 +1031,7 @@ function App() {
                 badge="Original"
                 image={originalImage}
                 empty="Upload gambar untuk melihat preview awal."
+                isCropTarget={true}
               />
               <PreviewBox
                 title="After"
@@ -894,6 +1048,7 @@ function App() {
               badge="Original"
               image={originalImage}
               empty="Upload gambar untuk melihat preview awal."
+              isCropTarget={true}
             />
           )}
 
