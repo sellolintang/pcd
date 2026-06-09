@@ -1,9 +1,17 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
 import cv2
 import numpy as np
 import io
+import math
+import heapq
+import matplotlib
+import matplotlib.pyplot as plt
+
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+from collections import Counter
+
+matplotlib.use("Agg")
 
 app = FastAPI(title="Editor Berkelas API")
 
@@ -40,18 +48,42 @@ def read_image_from_upload_bytes(contents: bytes):
     return img
 
 
-def encode_image(img, quality=95):
+def encode_image(img, quality=95, output_format="jpg"):
     quality = int(np.clip(int(quality), 1, 100))
-    is_success, encoded_img = cv2.imencode(
-        ".jpg",
-        img,
-        [int(cv2.IMWRITE_JPEG_QUALITY), quality]
-    )
+    output_format = (output_format or "jpg").lower().replace(".", "")
+
+    if output_format == "jpeg":
+        output_format = "jpg"
+
+    if output_format == "jpg":
+        ext = ".jpg"
+        media_type = "image/jpeg"
+        params = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+
+    elif output_format == "png":
+        ext = ".png"
+        media_type = "image/png"
+        params = [int(cv2.IMWRITE_PNG_COMPRESSION), 3]
+
+    elif output_format == "bmp":
+        ext = ".bmp"
+        media_type = "image/bmp"
+        params = []
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Format output tidak didukung. Gunakan jpg, png, atau bmp."
+        )
+
+    is_success, encoded_img = cv2.imencode(ext, img, params)
+
     if not is_success:
         raise HTTPException(status_code=500, detail="Gagal melakukan encoding gambar.")
+
     return StreamingResponse(
         io.BytesIO(encoded_img.tobytes()),
-        media_type="image/jpeg"
+        media_type=media_type
     )
 
 
@@ -340,6 +372,135 @@ def region_based_segmentation(img, k=3):
 # =========================================================
 # G. IMAGE COMPRESSION
 # =========================================================
+def estimate_huffman_bits(data):
+    counts = Counter(data.tolist())
+
+    if len(counts) == 0:
+        return 0
+
+    if len(counts) == 1:
+        return len(data)
+
+    heap = list(counts.values())
+    heapq.heapify(heap)
+
+    total_bits = 0
+
+    while len(heap) > 1:
+        first = heapq.heappop(heap)
+        second = heapq.heappop(heap)
+        merged = first + second
+        total_bits += merged
+        heapq.heappush(heap, merged)
+
+    return total_bits
+
+
+def estimate_arithmetic_bits(data):
+    counts = Counter(data.tolist())
+    total = len(data)
+
+    if total == 0:
+        return 0
+
+    entropy = 0.0
+
+    for count in counts.values():
+        probability = count / total
+        entropy -= probability * math.log2(probability)
+
+    return int(math.ceil(entropy * total)) + 32
+
+
+def estimate_lzw_bits(data):
+    values = data.tolist()
+
+    if len(values) == 0:
+        return 0
+
+    dictionary = {(i,): i for i in range(256)}
+    next_code = 256
+    max_dictionary_size = 4096
+
+    current = ()
+    code_count = 0
+
+    for value in values:
+        value = int(value)
+        combined = current + (value,)
+
+        if combined in dictionary:
+            current = combined
+        else:
+            code_count += 1
+
+            if next_code < max_dictionary_size:
+                dictionary[combined] = next_code
+                next_code += 1
+
+            current = (value,)
+
+    if current:
+        code_count += 1
+
+    return code_count * 12
+
+
+def compression_report_canvas(img, method="huffman"):
+    gray = to_gray(img)
+    data = gray.flatten()
+
+    original_bits = len(data) * 8
+
+    if method == "huffman":
+        compressed_bits = estimate_huffman_bits(data)
+        title = "Huffman Compression Simulation"
+    elif method == "arithmetic":
+        compressed_bits = estimate_arithmetic_bits(data)
+        title = "Arithmetic Compression Simulation"
+    elif method == "lzw":
+        compressed_bits = estimate_lzw_bits(data)
+        title = "LZW Compression Simulation"
+    else:
+        compressed_bits = original_bits
+        title = "Compression Simulation"
+
+    compressed_bits = max(1, compressed_bits)
+    compression_ratio = original_bits / compressed_bits
+    saving_percent = (1 - (compressed_bits / original_bits)) * 100 if original_bits > 0 else 0
+
+    canvas = np.full((420, 760, 3), 255, dtype=np.uint8)
+
+    lines = [
+        title,
+        f"Original size     : {original_bits:,} bits",
+        f"Compressed size   : {compressed_bits:,} bits",
+        f"Compression ratio : {compression_ratio:.2f} : 1",
+        f"Saving estimate   : {saving_percent:.2f}%",
+        "",
+        "Note:",
+        "This output is a visual simulation based on grayscale pixel data.",
+        "The method estimates compression efficiency for learning purposes."
+    ]
+
+    y = 55
+    for index, line in enumerate(lines):
+        font_scale = 0.85 if index == 0 else 0.62
+        thickness = 2 if index == 0 else 1
+        cv2.putText(
+            canvas,
+            line,
+            (35, y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            (20, 20, 20),
+            thickness,
+            cv2.LINE_AA
+        )
+        y += 42
+
+    return canvas
+
 def quantization_compression(img, quantization_level=32):
     quantization_level = int(np.clip(int(quantization_level), 2, 128))
     step = max(1, 256 // quantization_level)
@@ -356,60 +517,89 @@ def rle_visual_simulation(img):
 # =========================================================
 # H. HISTOGRAM ANALYSIS
 # =========================================================
-def create_histogram_canvas(img, mode="rgb", title="Histogram"):
-    height = 420
-    width = 768
-    margin_left = 50
-    margin_bottom = 45
-    top = 50
-    graph_h = height - top - margin_bottom
-    graph_w = width - margin_left - 30
+def matplotlib_figure_to_bgr(fig):
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", bbox_inches="tight", dpi=120)
+    plt.close(fig)
 
-    canvas = np.full((height, width, 3), 255, dtype=np.uint8)
-    cv2.putText(canvas, title, (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 20), 2)
-    cv2.line(canvas, (margin_left, top), (margin_left, top + graph_h), (0, 0, 0), 1)
-    cv2.line(canvas, (margin_left, top + graph_h), (margin_left + graph_w, top + graph_h), (0, 0, 0), 1)
+    buffer.seek(0)
+    image_array = np.frombuffer(buffer.getvalue(), np.uint8)
+    img = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise HTTPException(status_code=500, detail="Gagal membuat visualisasi histogram.")
+
+    return img
+
+
+def create_histogram_canvas(img, mode="rgb", title="Histogram"):
+    fig, ax = plt.subplots(figsize=(7.5, 4.2))
 
     if mode == "gray":
         gray = to_gray(img)
-        hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-        cv2.normalize(hist, hist, 0, graph_h, cv2.NORM_MINMAX)
-        points = []
-        for i in range(256):
-            x = margin_left + int(i * graph_w / 255)
-            y = top + graph_h - int(hist[i][0])
-            points.append((x, y))
-        for i in range(1, len(points)):
-            cv2.line(canvas, points[i - 1], points[i], (0, 0, 0), 2)
-    else:
-        # OpenCV BGR order: B, G, R
-        channels = [(0, (255, 0, 0), "B"), (1, (0, 160, 0), "G"), (2, (0, 0, 255), "R")]
-        for channel_index, color, _ in channels:
-            hist = cv2.calcHist([img], [channel_index], None, [256], [0, 256])
-            cv2.normalize(hist, hist, 0, graph_h, cv2.NORM_MINMAX)
-            points = []
-            for i in range(256):
-                x = margin_left + int(i * graph_w / 255)
-                y = top + graph_h - int(hist[i][0])
-                points.append((x, y))
-            for i in range(1, len(points)):
-                cv2.line(canvas, points[i - 1], points[i], color, 1)
+        ax.hist(gray.ravel(), bins=256, range=(0, 256))
+        ax.set_title(title)
+        ax.set_xlabel("Intensity")
+        ax.set_ylabel("Frequency")
 
-    cv2.putText(canvas, "0", (margin_left - 8, top + graph_h + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-    cv2.putText(canvas, "255", (margin_left + graph_w - 28, top + graph_h + 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
-    return canvas
+    else:
+        channel_data = [
+            (img[:, :, 2].ravel(), "Red"),
+            (img[:, :, 1].ravel(), "Green"),
+            (img[:, :, 0].ravel(), "Blue")
+        ]
+
+        for values, label in channel_data:
+            ax.hist(values, bins=256, range=(0, 256), alpha=0.45, label=label)
+
+        ax.set_title(title)
+        ax.set_xlabel("Intensity")
+        ax.set_ylabel("Frequency")
+        ax.legend()
+
+    ax.grid(True, alpha=0.25)
+
+    return matplotlib_figure_to_bgr(fig)
 
 
 def compare_histogram_canvas(original_img, processed_img, mode="rgb"):
-    left = create_histogram_canvas(original_img, mode, "Before Histogram")
-    right = create_histogram_canvas(processed_img, mode, "After Histogram")
-    divider = np.full((left.shape[0], 20, 3), 245, dtype=np.uint8)
-    return np.hstack([left, divider, right])
+    before = create_histogram_canvas(original_img, mode, "Before Histogram")
+    after = create_histogram_canvas(processed_img, mode, "After Histogram")
 
+    max_height = max(before.shape[0], after.shape[0])
+
+    def resize_to_height(image, target_height):
+        h, w = image.shape[:2]
+        if h == target_height:
+            return image
+        new_width = int(w * (target_height / h))
+        return cv2.resize(image, (new_width, target_height), interpolation=cv2.INTER_AREA)
+
+    before = resize_to_height(before, max_height)
+    after = resize_to_height(after, max_height)
+
+    divider = np.full((max_height, 20, 3), 245, dtype=np.uint8)
+
+    return np.hstack([before, divider, after])
 
 # =========================================================
 # MAIN IMAGE PROCESSING ENDPOINT
 # =========================================================
+@app.post("/api/export")
+async def export_image(
+    file: UploadFile = File(...),
+    output_format: str = Form("jpg"),
+    jpeg_quality: int = Form(95)
+):
+    contents = await file.read()
+    img = read_image_from_upload_bytes(contents)
+
+    return encode_image(
+        img,
+        quality=jpeg_quality,
+        output_format=output_format
+    )
+
 @app.post("/api/process")
 async def process_image(
     file: UploadFile = File(...),
@@ -458,7 +648,8 @@ async def process_image(
     quantization_level: int = Form(32),
 
     # H. Histogram
-    histogram_mode: str = Form("rgb")
+    histogram_mode: str = Form("rgb"),
+    output_format: str = Form("jpg")
 ):
     contents = await file.read()
     img = read_image_from_upload_bytes(contents)
@@ -548,6 +739,12 @@ async def process_image(
         processed_img = quantization_compression(img, quantization_level)
     elif operation == "rle_preview":
         processed_img = rle_visual_simulation(img)
+    elif operation == "huffman_preview":
+        processed_img = compression_report_canvas(img, "huffman")
+    elif operation == "arithmetic_preview":
+        processed_img = compression_report_canvas(img, "arithmetic")
+    elif operation == "lzw_preview":
+        processed_img = compression_report_canvas(img, "lzw")
 
     # H. Histogram Analysis
     elif operation == "histogram_gray":
@@ -558,7 +755,7 @@ async def process_image(
     else:
         raise HTTPException(status_code=400, detail=f"Operation '{operation}' belum tersedia.")
 
-    return encode_image(processed_img, output_quality)
+    return encode_image(processed_img, output_quality, output_format)
 
 
 @app.post("/api/histogram/compare")

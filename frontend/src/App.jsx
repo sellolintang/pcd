@@ -60,6 +60,12 @@ function App() {
   const [jpegQuality, setJpegQuality] = useState(70)
   const [quantizationLevels, setQuantizationLevels] = useState(8)
 
+  // Save / Export Modal
+  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [exportFilename, setExportFilename] = useState('hasil-edit')
+  const [exportFormat, setExportFormat] = useState('jpg')
+  const [exportQuality, setExportQuality] = useState(95)
+
   const groups = [
     { id: 'enhancement', icon: '1', title: 'Enhance', subtitle: 'Brightness, contrast, sharpen' },
     { id: 'restoration', icon: '2', title: 'Restore', subtitle: 'Noise reduction' },
@@ -98,12 +104,15 @@ function App() {
     invert: 'Invert Color',
     channel_split: 'Channel Split',
     hue_saturation: 'Hue & Saturation',
-    segmentation_threshold: 'Threshold Segmentation',
-    segmentation_edge: 'Edge Segmentation',
-    segmentation_region: 'Region Segmentation',
-    jpeg_compress: 'JPEG Compression',
+    threshold_segmentation: 'Threshold Segmentation',
+    edge_segmentation: 'Edge Segmentation',
+    region_segmentation: 'Region Segmentation',
+    jpeg_compression: 'JPEG Compression',
     quantization: 'Quantization',
-    rle_preview: 'RLE Preview'
+    rle_preview: 'RLE Preview',
+    huffman_preview: 'Huffman Compression',
+    arithmetic_preview: 'Arithmetic Compression',
+    lzw_preview: 'LZW Compression'
   }
 
   const requireImage = () => {
@@ -272,17 +281,71 @@ function App() {
   }
 
   const handleSaveImage = () => {
-    const imageToSave = processedImage || originalImage
-    if (!imageToSave) {
+    if (!selectedFile) {
       setStatus('Belum ada gambar untuk disimpan.')
       return
     }
 
-    const link = document.createElement('a')
-    link.href = imageToSave
-    link.download = processedImage ? 'hasil-edit.jpg' : 'gambar-awal.jpg'
-    link.click()
-    setStatus('Gambar berhasil disimpan.')
+    const baseName = selectedFile.name
+      ? selectedFile.name.replace(/\.[^/.]+$/, '')
+      : 'hasil-edit'
+
+    setExportFilename(processedImage ? 'hasil-edit' : baseName)
+    setExportFormat('jpg')
+    setExportQuality(95)
+    setShowSaveModal(true)
+  }
+
+  const handleExportImage = async () => {
+    if (!selectedFile) {
+      setStatus('Belum ada gambar untuk disimpan.')
+      return
+    }
+
+    const cleanFilename = exportFilename.trim().replace(/[\\/:*?"<>|]/g, '-')
+
+    if (!cleanFilename) {
+      setStatus('Nama file tidak boleh kosong.')
+      return
+    }
+
+    try {
+      setIsProcessing(true)
+      setStatus('Mengekspor gambar...')
+
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('output_format', exportFormat)
+      formData.append('jpeg_quality', exportQuality)
+
+      const response = await fetch('/api/export', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        throw new Error(await readError(response))
+      }
+
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+
+      const finalFormat = exportFormat === 'jpeg' ? 'jpg' : exportFormat
+
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${cleanFilename}.${finalFormat}`
+      link.click()
+
+      URL.revokeObjectURL(url)
+
+      setShowSaveModal(false)
+      setStatus(`Gambar berhasil disimpan sebagai ${cleanFilename}.${finalFormat}.`)
+    } catch (error) {
+      setStatus(`Error: ${error.message}`)
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const handleHistogram = async () => {
@@ -342,6 +405,11 @@ function App() {
 
       const data = await response.json()
       setCnnResult(data)
+
+      if (!data.success) {
+        setStatus(data.message || 'CNN belum tersedia.')
+        return
+      }
 
       const predictions = data.top_predictions
         ?.map((item) => `${item.label} (${item.confidence}%)`)
@@ -694,10 +762,10 @@ function App() {
 
           <Slider label="Morphology Kernel" value={morphologyKernel} min="3" max="15" step="2" onChange={setMorphologyKernel} />
           <div className="grid grid-cols-2 gap-3">
-            <ToolButton onClick={() => handleProcessImage('erosion', { morphology_kernel: morphologyKernel, threshold_value: thresholdValue })}>
+            <ToolButton onClick={() => handleProcessImage('erosion', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })}>
               Erosion
             </ToolButton>
-            <ToolButton onClick={() => handleProcessImage('dilation', { morphology_kernel: morphologyKernel, threshold_value: thresholdValue })}>
+            <ToolButton onClick={() => hhandleProcessImage('dilation', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })}>
               Dilation
             </ToolButton>
           </div>
@@ -729,7 +797,7 @@ function App() {
           <Slider label="Hue Shift" value={hueShift} min="-90" max="90" onChange={setHueShift} />
           <Slider label="Saturation" value={saturationValue} min="-100" max="100" onChange={setSaturationValue} />
 
-          <ToolButton onClick={() => handleProcessImage('hue_saturation', { hue_shift: hueShift, saturation_value: saturationValue })}>
+          <ToolButton onClick={() => handleProcessImage('hue_saturation', { hue_value: hueShift, saturation_value: saturationValue })}>
             Apply Hue & Saturation
           </ToolButton>
         </Panel>
@@ -743,16 +811,16 @@ function App() {
           description="Pisahkan region gambar menggunakan threshold, edge, atau clustering."
         >
           <Slider label="Threshold" value={thresholdValue} min="0" max="255" onChange={setThresholdValue} />
-          <ToolButton onClick={() => handleProcessImage('segmentation_threshold', { threshold_value: thresholdValue })}>
+          <ToolButton onClick={() => handleProcessImage('threshold_segmentation', { threshold_value: thresholdValue })}>
             Threshold Segmentation
           </ToolButton>
 
-          <ToolButton onClick={() => handleProcessImage('segmentation_edge')}>
+          <ToolButton onClick={() => handleProcessImage('edge_segmentation', { canny_low: cannyLow, canny_high: cannyHigh })}>
             Edge Segmentation
           </ToolButton>
 
           <Slider label="K-Means Cluster" value={clusterCount} min="2" max="8" onChange={setClusterCount} />
-          <ToolButton onClick={() => handleProcessImage('segmentation_region', { cluster_count: clusterCount })}>
+          <ToolButton onClick={() => handleProcessImage('region_segmentation', { segment_k: clusterCount })}>
             Region Segmentation
           </ToolButton>
         </Panel>
@@ -766,17 +834,29 @@ function App() {
           description="Simulasi kompresi JPEG, kuantisasi, dan RLE preview."
         >
           <Slider label="JPEG Quality" value={jpegQuality} min="1" max="100" onChange={setJpegQuality} />
-          <ToolButton onClick={() => handleProcessImage('jpeg_compress', { jpeg_quality: jpegQuality })}>
+          <ToolButton onClick={() => handleProcessImage('jpeg_compression', { jpeg_quality: jpegQuality })}>
             JPEG Compression
           </ToolButton>
 
           <Slider label="Quantization Levels" value={quantizationLevels} min="2" max="32" onChange={setQuantizationLevels} />
-          <ToolButton onClick={() => handleProcessImage('quantization', { quantization_levels: quantizationLevels })}>
+          <ToolButton onClick={() => handleProcessImage('quantization', { quantization_level: quantizationLevels })}>
             Quantization
           </ToolButton>
 
           <ToolButton onClick={() => handleProcessImage('rle_preview')}>
             RLE Visual Preview
+          </ToolButton>
+
+          <ToolButton onClick={() => handleProcessImage('huffman_preview')}>
+            Huffman Simulation
+          </ToolButton>
+
+          <ToolButton onClick={() => handleProcessImage('arithmetic_preview')}>
+            Arithmetic Simulation
+          </ToolButton>
+
+          <ToolButton onClick={() => handleProcessImage('lzw_preview')}>
+            LZW Simulation
           </ToolButton>
         </Panel>
       )
@@ -914,6 +994,96 @@ function App() {
   )
 
   return (
+    <>
+    {showSaveModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4">
+        <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="mb-5">
+            <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">
+              Export Image
+            </p>
+
+            <h2 className="mt-1 text-2xl font-bold text-slate-900">
+              Save File
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Atur nama file, format output, dan kualitas gambar sebelum menyimpan.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-700">
+                File Name
+              </span>
+
+              <input
+                type="text"
+                value={exportFilename}
+                onChange={(event) => setExportFilename(event.target.value)}
+                className={inputClass}
+                placeholder="hasil-edit"
+                autoFocus
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-slate-700">
+                File Format
+              </span>
+
+              <select
+                value={exportFormat}
+                onChange={(event) => setExportFormat(event.target.value)}
+                className={inputClass}
+              >
+                <option value="jpg">JPG</option>
+                <option value="png">PNG</option>
+                <option value="bmp">BMP</option>
+              </select>
+            </label>
+
+            {exportFormat === 'jpg' && (
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  JPEG Quality: {exportQuality}
+                </span>
+
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={exportQuality}
+                  onChange={(event) => setExportQuality(Number(event.target.value))}
+                  className="w-full accent-blue-600"
+                />
+              </label>
+            )}
+          </div>
+
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setShowSaveModal(false)}
+              className={`${buttonBase} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+              disabled={isProcessing}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportImage}
+              className={primaryButton}
+              disabled={isProcessing}
+            >
+              {isProcessing ? 'Saving...' : 'Save Image'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1500px] flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1075,6 +1245,7 @@ function App() {
         <aside>{renderPanel()}</aside>
       </main>
     </div>
+    </>
   )
 }
 
