@@ -102,6 +102,7 @@ function App() {
   const [previewMode, setPreviewMode] = useState('split')
   const [histogramData, setHistogramData] = useState(null)
   const [cnnResult, setCnnResult] = useState(null)
+  const [cnnTargetObject, setCnnTargetObject] = useState('general')
 
   // Enhancement
   const [brightnessValue, setBrightnessValue] = useState(0)
@@ -638,6 +639,7 @@ function App() {
 
       const formData = new FormData()
       formData.append('file', selectedFile)
+      formData.append('target_object', cnnTargetObject)
 
       const response = await fetch('/api/cnn/recognize', {
         method: 'POST',
@@ -660,7 +662,11 @@ function App() {
         ?.map((item) => `${item.label} (${item.confidence}%)`)
         .join(', ')
 
-      setStatus(`CNN selesai: ${predictions}`)
+      const targetText = data.target_object !== 'general'
+        ? ` Target "${data.target_object}" ${data.is_target_detected ? 'terdeteksi' : 'tidak terdeteksi'} dalam top prediction.`
+        : ''
+
+      setStatus(`CNN selesai: ${predictions}.${targetText}`)
     } catch (error) {
       setStatus(`Error: ${error.message}`)
     } finally {
@@ -1112,9 +1118,33 @@ function App() {
           Histogram Summary
         </ToolButton>
 
-        <ToolButton onClick={handleCnnRecognize} disabled={isProcessing || !selectedFile} className={toolButton}>
-          Run CNN Recognition
-        </ToolButton>
+        <div className="space-y-3">
+          <label className="block text-sm font-semibold text-slate-700">
+            Target Object
+          </label>
+
+          <select
+            value={cnnTargetObject}
+            onChange={(event) => setCnnTargetObject(event.target.value)}
+            className={inputClass}
+          >
+            <option value="general">General Object Recognition</option>
+            <option value="cat">Cat</option>
+            <option value="dog">Dog</option>
+            <option value="car">Car</option>
+            <option value="bird">Bird</option>
+            <option value="bottle">Bottle</option>
+            <option value="chair">Chair</option>
+          </select>
+
+          <ToolButton
+            onClick={handleCnnRecognize}
+            disabled={isProcessing || !selectedFile}
+            className={toolButton}
+          >
+            Run CNN Recognition
+          </ToolButton>
+        </div>
 
         {histogramData && (
           <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -1147,25 +1177,60 @@ function App() {
         )}
 
         {cnnResult && (
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <h3 className="font-bold text-slate-900">CNN Result</h3>
-            <p className="mt-2 text-sm text-slate-500">
-              Prediksi utama:
-              <span className="ml-1 font-bold text-blue-700">
-                {cnnResult.label} ({cnnResult.confidence}%)
-              </span>
-            </p>
-            <div className="mt-3 space-y-2">
-              {cnnResult.top_predictions?.map((item, index) => (
-                <div
-                  key={`${item.label}-${index}`}
-                  className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm"
-                >
-                  <span>{index + 1}. {item.label}</span>
-                  <span className="font-bold text-blue-700">{item.confidence}%</span>
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <h3 className="font-bold text-slate-900">CNN Object Recognition</h3>
+
+            {!cnnResult.success ? (
+              <div className="rounded-xl bg-red-50 p-3 text-red-700">
+                {cnnResult.message || 'CNN belum tersedia.'}
+              </div>
+            ) : (
+              <>
+                <div className="rounded-xl bg-white p-3">
+                  <p>
+                    Model: <strong>{cnnResult.model}</strong>
+                  </p>
+                  <p>
+                    Input size: <strong>{cnnResult.input_size}</strong>
+                  </p>
+                  <p>
+                    Prediksi utama: <strong>{cnnResult.label}</strong> ({cnnResult.confidence}%)
+                  </p>
+
+                  {cnnResult.target_object && cnnResult.target_object !== 'general' && (
+                    <p>
+                      Target object: <strong>{cnnResult.target_object}</strong> -
+                      {' '}
+                      <strong>
+                        {cnnResult.is_target_detected ? 'Detected' : 'Not detected'}
+                      </strong>
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
+
+                <div className="rounded-xl bg-white p-3">
+                  <p className="mb-2 font-semibold text-slate-900">Top Predictions</p>
+
+                  <div className="space-y-2">
+                    {cnnResult.top_predictions?.map((item, index) => (
+                      <div key={index}>
+                        <div className="flex justify-between gap-3">
+                          <span>{item.rank || index + 1}. {item.label}</span>
+                          <span className="font-semibold">{item.confidence}%</span>
+                        </div>
+
+                        <div className="mt-1 h-2 rounded-full bg-slate-200">
+                          <div
+                            className="h-2 rounded-full bg-blue-600"
+                            style={{ width: `${Math.min(item.confidence, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Panel>

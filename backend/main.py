@@ -900,12 +900,21 @@ async def compare_histogram(
 
 
 @app.post("/api/cnn/recognize")
-async def cnn_recognize(file: UploadFile = File(...)):
+async def cnn_recognize(
+    file: UploadFile = File(...),
+    target_object: str = Form("general")
+):
     """
-    CNN object recognition menggunakan MobileNetV2 jika TensorFlow tersedia.
-    Jika TensorFlow belum terpasang, endpoint tidak membuat server error,
-    tetapi mengembalikan informasi bahwa dependency belum tersedia.
+    CNN Object Recognition menggunakan MobileNetV2 pretrained ImageNet.
+
+    Fitur ini digunakan sebagai nilai tambah project:
+    - membaca gambar input
+    - melakukan preprocessing ukuran 224x224
+    - menjalankan prediksi CNN
+    - menampilkan top-5 prediksi objek
+    - menghitung confidence score
     """
+
     global _cnn_model
 
     contents = await file.read()
@@ -917,12 +926,14 @@ async def cnn_recognize(file: UploadFile = File(...)):
             preprocess_input,
             decode_predictions
         )
-    except Exception:
+    except Exception as exc:
         return JSONResponse({
             "success": False,
-            "message": "TensorFlow belum terinstall. Install dengan: pip install tensorflow",
+            "message": f"TensorFlow belum tersedia atau gagal dimuat: {str(exc)}",
+            "model": "MobileNetV2",
             "label": "CNN unavailable",
-            "confidence": 0
+            "confidence": 0,
+            "top_predictions": []
         })
 
     if _cnn_model is None:
@@ -932,29 +943,46 @@ async def cnn_recognize(file: UploadFile = File(...)):
             return JSONResponse({
                 "success": False,
                 "message": f"Model MobileNetV2 belum bisa dimuat: {str(exc)}",
+                "model": "MobileNetV2",
                 "label": "Model unavailable",
-                "confidence": 0
+                "confidence": 0,
+                "top_predictions": []
             })
 
     rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     resized = cv2.resize(rgb, (224, 224))
+
     arr = np.expand_dims(resized.astype(np.float32), axis=0)
     arr = preprocess_input(arr)
 
     preds = _cnn_model.predict(arr, verbose=0)
-    decoded = decode_predictions(preds, top=3)[0]
+    decoded = decode_predictions(preds, top=5)[0]
 
     results = [
         {
+            "rank": index + 1,
             "label": item[1].replace("_", " "),
             "confidence": round(float(item[2]) * 100, 2)
         }
-        for item in decoded
+        for index, item in enumerate(decoded)
     ]
+
+    target_object = (target_object or "general").strip().lower()
+
+    is_target_detected = False
+    if target_object != "general":
+        is_target_detected = any(
+            target_object in item["label"].lower()
+            for item in results
+        )
 
     return JSONResponse({
         "success": True,
         "message": "CNN object recognition berhasil.",
+        "model": "MobileNetV2 pretrained ImageNet",
+        "input_size": "224x224",
+        "target_object": target_object,
+        "is_target_detected": is_target_detected,
         "label": results[0]["label"],
         "confidence": results[0]["confidence"],
         "top_predictions": results
