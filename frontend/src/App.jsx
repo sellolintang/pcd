@@ -798,7 +798,7 @@ function App() {
             Laplacian of Gaussian
           </ToolButton>
 
-          <Slider label="Morphology Kernel" value={morphologyKernel} min="3" max="15" step="2" onChange={setMorphologyKernel} />
+          <Slider label="Morphology Kernel" value={morphologyKernel} min="1" max="21" step="2" onChange={setMorphologyKernel} />
           <div className="grid grid-cols-2 gap-3">
             <ToolButton onClick={() => handleProcessImage('erosion', { morph_kernel: morphologyKernel, threshold_value: thresholdValue })} disabled={isProcessing || !selectedFile} className={toolButton}>
               Erosion
@@ -886,7 +886,7 @@ function App() {
             JPEG Compression
           </ToolButton>
 
-          <Slider label="Quantization Levels" value={quantizationLevels} min="2" max="32" onChange={setQuantizationLevels} />
+          <Slider label="Quantization Levels" value={quantizationLevels} min="2" max="128" onChange={setQuantizationLevels} />
           <ToolButton onClick={() => handleProcessImage('quantization', { quantization_level: quantizationLevels })} disabled={isProcessing || !selectedFile} className={toolButton}>
             Quantization
           </ToolButton>
