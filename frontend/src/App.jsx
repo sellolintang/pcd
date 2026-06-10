@@ -730,13 +730,50 @@ function App() {
 
   const handleApplyCrop = () => {
     const coords = getImageCropCoords()
+
     if (!coords || coords.w < 5 || coords.h < 5) {
       setStatus('Pilih area crop terlebih dahulu dengan drag di gambar.')
       return
     }
+
+    setCropX(coords.x)
+    setCropY(coords.y)
+    setCropW(coords.w)
+    setCropH(coords.h)
+
     setCropMode(false)
     setCropSelection(null)
-    handleProcessImage('crop', { crop_x: coords.x, crop_y: coords.y, crop_w: coords.w, crop_h: coords.h })
+
+    handleProcessImage('crop', {
+      crop_x: coords.x,
+      crop_y: coords.y,
+      crop_w: coords.w,
+      crop_h: coords.h,
+    })
+  }
+
+  const handleApplyManualCrop = () => {
+    if (!requireImage()) return
+
+    const x = Math.max(0, Number(cropX))
+    const y = Math.max(0, Number(cropY))
+    const w = Math.max(1, Number(cropW))
+    const h = Math.max(1, Number(cropH))
+
+    if (w < 5 || h < 5) {
+      setStatus('Lebar dan tinggi crop minimal 5 piksel.')
+      return
+    }
+
+    setCropMode(false)
+    setCropSelection(null)
+
+    handleProcessImage('crop', {
+      crop_x: x,
+      crop_y: y,
+      crop_w: w,
+      crop_h: h,
+    })
   }
 
   const activeGroupData = groups.find((item) => item.id === activeGroup)
@@ -869,52 +906,99 @@ function App() {
             Translate
           </ToolButton>
 
-          {/* Interactive Crop */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+          {/* Crop */}
+          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-700">Crop</span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">Crop</p>
+                <p className="text-xs text-slate-500">
+                  Pilih area dengan drag atau masukkan nilai manual.
+                </p>
+              </div>
+
               {cropSelection && (
-                <span className="text-xs text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded-lg">
+                <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                   {Math.round(cropSelection.w)} × {Math.round(cropSelection.h)}px
                 </span>
               )}
             </div>
-            {!cropMode ? (
-              <button
-                type="button"
-                onClick={() => { setCropMode(true); setCropSelection(null) }}
-                disabled={isProcessing || !selectedFile}
-                className={`${toolButton} flex items-center justify-center gap-2`}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7 3v4M3 7h4M17 3v4M21 7h-4M7 21v-4M3 17h4M17 21v-4M21 17h-4M9 9h6v6H9z" />
-                </svg>
-                Select Crop Area
-              </button>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2 leading-relaxed">
-                  🖱️ Drag di gambar <strong>Before</strong> untuk memilih area crop.
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
+
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput
+                label="Kiri / X"
+                value={cropX}
+                onChange={setCropX}
+                inputClass={inputClass}
+              />
+
+              <NumberInput
+                label="Atas / Y"
+                value={cropY}
+                onChange={setCropY}
+                inputClass={inputClass}
+              />
+
+              <NumberInput
+                label="Lebar"
+                value={cropW}
+                onChange={setCropW}
+                inputClass={inputClass}
+              />
+
+              <NumberInput
+                label="Tinggi"
+                value={cropH}
+                onChange={setCropH}
+                inputClass={inputClass}
+              />
+            </div>
+
+            <ToolButton
+              onClick={handleApplyManualCrop}
+              disabled={isProcessing || !selectedFile}
+              className={toolButton}
+            >
+              Apply Manual Crop
+            </ToolButton>
+
+            <div className="border-t border-slate-100 pt-3">
+              {!cropMode ? (
+                <ToolButton
+                  onClick={() => {
+                    setCropMode(true)
+                    setCropSelection(null)
+                  }}
+                  disabled={isProcessing || !selectedFile}
+                  className={`${toolButton} flex items-center justify-center gap-2`}
+                >
+                  Select Crop Area
+                </ToolButton>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">
+                    Drag di gambar Before untuk memilih area crop.
+                  </p>
+
+                  <ToolButton
                     onClick={handleApplyCrop}
-                    disabled={!cropSelection || cropSelection.w < 5}
-                    className={`${buttonBase} bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40`}
+                    disabled={isProcessing || !selectedFile}
+                    className={toolButton}
                   >
-                    Apply Crop
-                  </button>
+                    Apply Drag Crop
+                  </ToolButton>
+
                   <button
-                    type="button"
-                    onClick={() => { setCropMode(false); setCropSelection(null) }}
-                    className={`${buttonBase} bg-slate-100 text-slate-700 hover:bg-slate-200`}
+                    onClick={() => {
+                      setCropMode(false)
+                      setCropSelection(null)
+                    }}
+                    className={`${buttonBase} w-full bg-slate-100 text-slate-700 hover:bg-slate-200`}
                   >
-                    Cancel
+                    Cancel Drag Crop
                   </button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </Panel>
       )
@@ -1246,7 +1330,7 @@ function App() {
         <div className="flex items-center gap-2">
           {isCropTarget && cropMode && (
             <span className="animate-pulse rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">
-              ✂️ Drag to crop
+              Drag to crop
             </span>
           )}
           <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
